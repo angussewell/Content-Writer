@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+export const dynamic = "force-dynamic";
 import { scripts, intros, contextItems } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
 import Editor from "@/components/Editor";

@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+export const dynamic = "force-dynamic";
 import { scripts } from "@/db/schema";
 import { desc } from "drizzle-orm";
 import Link from "next/link";
