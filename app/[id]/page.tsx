@@ -35,6 +35,7 @@ export default async function ScriptPage({ params }: { params: Promise<{ id: str
                     id: script.id,
                     title: script.title,
                     body: script.body || "",
+                    status: script.status as any, // Cast to match interface in Editor
                     intros: scriptIntros.map((i): any => ({
                         id: i.id,
                         titleHook: i.titleHook || "",

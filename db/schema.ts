@@ -4,6 +4,7 @@ export const scripts = pgTable("scripts", {
     id: uuid("id").defaultRandom().primaryKey(),
     title: text("title").notNull(),
     body: text("body").default(""),
+    status: text("status", { enum: ["draft", "filmed", "done", "archived"] }).default("draft").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

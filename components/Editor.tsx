@@ -6,7 +6,7 @@ import { ArrowLeft, Save, Plus, Trash2, ChevronRight, ChevronDown } from "lucide
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { updateScript, deleteScript } from "@/app/actions";
+import { updateScript, deleteScript, updateScriptStatus } from "@/app/actions";
 
 interface Intro {
     id: string; // can be uuid or temp id
@@ -26,6 +26,7 @@ interface ScriptData {
     id: string;
     title: string;
     body: string;
+    status: "draft" | "filmed" | "done" | "archived";
     intros: Intro[];
     contextItems?: ContextItem[];
 }
@@ -37,17 +38,23 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
     const router = useRouter();
 
     const handleSave = () => {
+        // Ensure we always have an array, even if empty
+        const payloadContextItems = data.contextItems || [];
+
+        console.log("Saving script. sending contextItems:", payloadContextItems);
+
         startTransition(async () => {
             try {
                 await updateScript(data.id, {
                     title: data.title,
                     body: data.body,
                     intros: data.intros,
-                    contextItems: data.contextItems,
+                    contextItems: payloadContextItems,
                 });
                 toast.success("Saved");
                 router.refresh(); // Refresh to ensure server data is synced
             } catch (e) {
+                console.error("Failed to save script:", e);
                 toast.error("Failed to save");
             }
         });
@@ -123,7 +130,31 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                 >
                     <ArrowLeft size={20} />
                 </Link>
-                <div className="flex items-center">
+
+                <div className="flex items-center gap-3">
+                    <div className="relative group">
+                        <select
+                            value={data.status}
+                            onChange={(e) => {
+                                const newStatus = e.target.value as any;
+                                setData({ ...data, status: newStatus });
+                                startTransition(async () => {
+                                    await updateScriptStatus(data.id, newStatus);
+                                    toast.success("Status updated");
+                                });
+                            }}
+                            className="appearance-none bg-neutral-100 dark:bg-neutral-900 border border-transparent hover:border-neutral-200 dark:hover:border-neutral-800 text-neutral-600 dark:text-neutral-400 text-xs font-medium px-3 py-1.5 rounded-md cursor-pointer focus:outline-none pr-8 transition-all capitalize"
+                        >
+                            <option value="draft">Draft</option>
+                            <option value="filmed">Filmed</option>
+                            <option value="done">Done</option>
+                            <option value="archived">Archived</option>
+                        </select>
+                        <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
+                    </div>
+
+                    <div className="w-px h-6 bg-neutral-200 dark:bg-neutral-800 mx-1" />
+
                     <button
                         onClick={() => {
                             if (window.confirm("Are you sure you want to delete this script?")) {
@@ -133,12 +164,12 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                             }
                         }}
                         disabled={isPending}
-                        className="text-neutral-500 hover:text-red-500 transition-colors p-2 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-900 mr-2"
+                        className="text-neutral-500 hover:text-red-500 transition-colors p-2 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-900"
                         title="Delete Script"
                     >
                         <Trash2 size={20} />
                     </button>
-                    <div className="w-px h-6 bg-neutral-200 dark:bg-neutral-800 mx-2" />
+                    <div className="w-px h-6 bg-neutral-200 dark:bg-neutral-800 mx-1" />
                     <button
                         onClick={handleSave}
                         disabled={isPending}
