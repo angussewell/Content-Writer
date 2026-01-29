@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import TextareaAutosize from "react-textarea-autosize";
-import { ArrowLeft, Save, Plus, Trash2, ChevronRight, ChevronDown } from "lucide-react";
+import { ArrowLeft, Save, Plus, Trash2, ChevronRight, ChevronDown, Sparkles } from "lucide-react";
+import SuggestionDrawer from "./SuggestionDrawer";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -35,7 +36,20 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
     const [data, setData] = useState<ScriptData>(initialData);
     const [isPending, startTransition] = useTransition();
     const [isContextOpen, setIsContextOpen] = useState(false);
+    const [activeSuggestion, setActiveSuggestion] = useState<{ introId: string | null, type: "hook" | "intro" | null, text: string }>({ introId: null, type: null, text: "" });
     const router = useRouter();
+
+    const openSuggestion = (intro: Intro, type: "hook" | "intro") => {
+        if (intro.isNew) {
+            toast.error("Please save the script before using AI suggestions.");
+            return;
+        }
+        setActiveSuggestion({
+            introId: intro.id,
+            type,
+            text: type === "hook" ? intro.titleHook : intro.verbalIntro
+        });
+    };
 
     const handleSave = () => {
         // Ensure we always have an array, even if empty
@@ -123,6 +137,13 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
 
     return (
         <div className="min-h-screen relative font-sans bg-white dark:bg-black text-neutral-900 dark:text-neutral-100">
+            <SuggestionDrawer
+                isOpen={!!activeSuggestion.introId}
+                introId={activeSuggestion.introId}
+                type={activeSuggestion.type}
+                currentText={activeSuggestion.text}
+                onClose={() => setActiveSuggestion({ introId: null, type: null, text: "" })}
+            />
             <header className="w-full px-8 py-4 flex items-center justify-between sticky top-0 bg-white/80 dark:bg-black/80 backdrop-blur-md z-10 border-b border-transparent">
                 <Link
                     href="/"
@@ -253,21 +274,35 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                                         </button>
                                     </div>
                                     <div className="space-y-4">
-                                        <div>
+                                        <div className="relative group/input">
                                             <TextareaAutosize
                                                 placeholder="Title Hook (Text on screen)..."
                                                 value={intro.titleHook}
                                                 onChange={(e) => updateIntro(intro.id, "titleHook", e.target.value)}
-                                                className="w-full bg-transparent text-2xl font-semibold outline-none resize-none placeholder:text-neutral-300 dark:placeholder:text-neutral-700"
+                                                className="w-full bg-transparent text-2xl font-semibold outline-none resize-none placeholder:text-neutral-300 dark:placeholder:text-neutral-700 pr-10"
                                             />
+                                            <button
+                                                onClick={() => openSuggestion(intro, "hook")}
+                                                className="absolute right-0 top-1 text-neutral-300 hover:text-amber-400 opacity-0 group-hover/input:opacity-100 transition-all p-1"
+                                                title="AI Suggestions"
+                                            >
+                                                <Sparkles size={16} />
+                                            </button>
                                         </div>
-                                        <div>
+                                        <div className="relative group/input">
                                             <TextareaAutosize
                                                 placeholder="Verbal Intro (What you say)..."
                                                 value={intro.verbalIntro}
                                                 onChange={(e) => updateIntro(intro.id, "verbalIntro", e.target.value)}
-                                                className="w-full bg-transparent text-lg text-neutral-600 dark:text-neutral-300 outline-none resize-none placeholder:text-neutral-300 dark:placeholder:text-neutral-700 font-normal leading-relaxed"
+                                                className="w-full bg-transparent text-lg text-neutral-600 dark:text-neutral-300 outline-none resize-none placeholder:text-neutral-300 dark:placeholder:text-neutral-700 font-normal leading-relaxed pr-10"
                                             />
+                                            <button
+                                                onClick={() => openSuggestion(intro, "intro")}
+                                                className="absolute right-0 top-1 text-neutral-300 hover:text-amber-400 opacity-0 group-hover/input:opacity-100 transition-all p-1"
+                                                title="AI Suggestions"
+                                            >
+                                                <Sparkles size={16} />
+                                            </button>
                                         </div>
                                     </div>
                                 </div>

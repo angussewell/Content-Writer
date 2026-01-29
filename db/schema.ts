@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, json } from "drizzle-orm/pg-core";
 
 export const scripts = pgTable("scripts", {
     id: uuid("id").defaultRandom().primaryKey(),
@@ -25,5 +25,16 @@ export const contextItems = pgTable("context_items", {
         .references(() => scripts.id, { onDelete: "cascade" })
         .notNull(),
     content: text("content").default("").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const suggestions = pgTable("suggestions", {
+    id: uuid("id").defaultRandom().primaryKey(),
+    introId: uuid("intro_id")
+        .references(() => intros.id, { onDelete: "cascade" })
+        .notNull(),
+    type: text("type", { enum: ["hook", "intro"] }).notNull(),
+    score: integer("score"),
+    content: json("content"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
 });
