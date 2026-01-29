@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import TextareaAutosize from "react-textarea-autosize";
-import { ArrowLeft, Save, Plus, Trash2, ChevronRight, ChevronDown, Sparkles } from "lucide-react";
+import { ArrowLeft, Save, Plus, Trash2, ChevronRight, ChevronDown, Sparkles, Copy } from "lucide-react";
 import SuggestionDrawer from "./SuggestionDrawer";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -72,6 +72,16 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                 toast.error("Failed to save");
             }
         });
+    };
+
+    const handleCopy = () => {
+        const textToCopy = [
+            ...data.intros.map(intro => intro.verbalIntro).filter(Boolean),
+            data.body
+        ].filter(Boolean).join("\n\n");
+
+        navigator.clipboard.writeText(textToCopy);
+        toast.success("Script copied to clipboard");
     };
 
     const addIntro = () => {
@@ -190,6 +200,16 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                     >
                         <Trash2 size={20} />
                     </button>
+                    <div className="w-px h-6 bg-neutral-200 dark:bg-neutral-800 mx-1" />
+
+                    <button
+                        onClick={handleCopy}
+                        className="text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors p-2 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-900"
+                        title="Copy Script"
+                    >
+                        <Copy size={20} />
+                    </button>
+
                     <div className="w-px h-6 bg-neutral-200 dark:bg-neutral-800 mx-1" />
                     <button
                         onClick={handleSave}
