@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 export const dynamic = "force-dynamic";
-import { scripts, intros, contextItems } from "@/db/schema";
-import { eq, asc } from "drizzle-orm";
+import { scripts, intros, contextItems, scriptImages } from "@/db/schema";
+import { eq, asc, desc } from "drizzle-orm";
 import Editor from "@/components/Editor";
 import { notFound } from "next/navigation";
 import { Toaster } from "sonner";
@@ -27,6 +27,11 @@ export default async function ScriptPage({ params }: { params: Promise<{ id: str
         orderBy: asc(contextItems.createdAt),
     });
 
+    const scriptImagesData = await db.query.scriptImages.findMany({
+        where: eq(scriptImages.scriptId, id),
+        orderBy: desc(scriptImages.createdAt),
+    });
+
     return (
         <>
             <Toaster position="top-center" />
@@ -44,6 +49,12 @@ export default async function ScriptPage({ params }: { params: Promise<{ id: str
                     contextItems: scriptContextItems.map((c): any => ({
                         id: c.id,
                         content: c.content || "",
+                    })),
+                    scriptImages: scriptImagesData.map((img) => ({
+                        id: img.id,
+                        imageUrl: img.imageUrl,
+                        prompt: img.prompt,
+                        createdAt: img.createdAt,
                     })),
                 }}
             />

@@ -38,3 +38,13 @@ export const suggestions = pgTable("suggestions", {
     content: json("content"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const scriptImages = pgTable("script_images", {
+    id: uuid("id").defaultRandom().primaryKey(),
+    scriptId: uuid("script_id")
+        .references(() => scripts.id, { onDelete: "cascade" })
+        .notNull(),
+    imageUrl: text("image_url").notNull(),
+    prompt: text("prompt"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+});

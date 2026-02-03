@@ -1,173 +1,189 @@
 {
     "metadata": {
-        "generated_at": "2026-01-28T19:08:27-06:00",
-        "last_updated": "2026-01-28T19:08:27-06:00",
+        "generated_at": "2026-02-03T16:15:00-06:00",
+        "last_updated": "2026-02-03T16:15:00-06:00",
         "analysis_scope": "full"
     },
     "project": {
         "name": "Reel Scripter",
-        "description": "A minimalist web application for scripting Instagram Reels and short-form video content. It streamlines the workflow from idea generation to filming and archiving, providing a focused environment for creators.",
-        "user_workflow": {
-            "primary_flow": "User logs in (password protected) → Lands on Dashboard (default 'Write' tab) → Clicks 'New Script' → Redirected to Editor → Drafts content, adds 'Intros' (hooks) and 'Context' (research) → Marks status as 'Filmed' on Dashboard or Editor → Script moves to 'Edit' tab → Edited and marked 'Done' → Script moves to 'Archive'",
-            "user_goal": "Efficiently manage the lifecycle of short-form video scripts from draft to completion without distraction.",
-            "key_interactions": [
-                "Creating a new script via the Dashboard header",
-                "Editing script body, intros, and context in the specific Script Editor",
-                "Toggling script status (Draft/Filmed/Done/Archived) to move it through the pipeline",
-                "Quick-marking scripts as 'Filmed' from the Dashboard card hover state",
-                "Deleting scripts or context items"
-            ]
-        },
+        "description": "A minimalist, high-performance web application designed for scripting short-form video content (Instagram Reels, TikToks). It streamlines the creative workflow from initial drafting to filming and archiving, providing a distraction-free environment with integrated AI powered feedback loops for optimizing hooks and intros.",
         "type": "web_app",
-        "tech_summary": "Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4, Drizzle ORM, PostgreSQL"
+        "tech_summary": "Next.js 16.1.6 (App Router), React 19.2.3, TypeScript, Tailwind CSS v4, Drizzle ORM, PostgreSQL",
+        "user_workflow": {
+            "primary_flow": "User authenticates (password) → Dashboard (Write tab) → Creates New Script → Editor Interface → Drafts Body & Context → Defines Intros (Hooks/Verbal Intros) → Requests AI Analysis via Side-Car Drawer → Reviews & Applies AI Suggestions → Marks as 'Filmed' → Dashboard (Edit tab) → Final Polish → Marks as 'Done' → Dashboard (Archive tab)",
+            "user_goal": "To rapidly iterate on short-form video concepts, leveraging AI for optimization, and managing the production status of multiple scripts in a unified workspace.",
+            "key_interactions": [
+                "Dashboard: Filtering scripts by status (Write, Edit, Archive) using URL parameters",
+                "Editor: Real-time drafting with auto-save operations (via server actions)",
+                "AI Feedback: Opening the Suggestion Drawer, triggering n8n webhooks for 'Hook' or 'Intro' analysis",
+                "Context Management: Adding research notes/context that feed into the AI analysis context window",
+                "Status Management: Visual toggles to move scripts through the production pipeline (Draft -> Filmed -> Done -> Archived)"
+            ]
+        }
     },
     "architecture": {
-        "overview": "A Next.js App Router application utilizing Server Components for data fetching and Server Actions for mutations. It adheres to a minimalist design philosophy both visually and architecturally, with direct DB access in server components.",
+        "overview": "A server-centric Next.js 16 application leveraging React Server Components for data hydration and Server Actions for all mutations. The architecture prioritizes simplicity and direct database interaction, eschewing a separate API layer in favor of collocated data access patterns.",
         "style": "monolith",
-        "data_flow": "Server Components (Page) fetch data via Drizzle ORM → Data passed to Client Components (Editor) → User interactions trigger Server Actions → Actions mutate DB → Path revalidation updates UI",
+        "data_flow": "Server Page fetches data (Drizzle) → Hydrates Client Component (Editor) → User Interaction → Server Action (mutation) → Database Update → revalidatePath() → Client UI Update",
         "key_components": [
             {
                 "component": "Dashboard (app/page.tsx)",
-                "purpose": "Main hub for viewing scripts filtered by status (Write, Edit, Archive). Handles creation of new scripts.",
-                "interactions": "Fetches script list, filters by tab param, triggers createScript action"
-            },
-            {
-                "component": "ScriptPage (app/[id]/page.tsx)",
-                "purpose": "Data hydration wrapper for the Editor. Fetches full script details, intros, and context items.",
-                "interactions": "Fetches relations via Drizzle, passes initialData to Editor client component"
+                "purpose": "Central hub for script management. Implements tab-based filtering and status visualization.",
+                "interactions": "Fetches scripts based on searchParams, handles creation of new scripts via form action."
             },
             {
                 "component": "Editor (components/Editor.tsx)",
-                "purpose": "Rich interaction interface for modifying script content. (Inferred from usage)",
-                "interactions": "Manages local state, auto-saves via updateScript action"
+                "purpose": "Primary workspace. Manages local state for immediate feedback while syncing with server.",
+                "interactions": "Invokes 'updateScript' for content changes, manages 'SuggestionDrawer' visibility state."
+            },
+            {
+                "component": "SituationDrawer (components/SuggestionDrawer.tsx)",
+                "purpose": "Side-car interface for AI interactions. Displays analysis history and allows content replacement.",
+                "interactions": "Calls 'generateSuggestion' (n8n link) and 'applySuggestion' actions. Uses useTransition for pending states."
             },
             {
                 "component": "Server Actions (app/actions.ts)",
-                "purpose": "Encapsulates all business logic and DB mutations.",
-                "interactions": "Called by client components to Create, Update, Delete, Login"
+                "purpose": "Business logic and database interface. Handles auth, CRUD operations, and external API calls.",
+                "interactions": "Bridge between client components and Postgres/N8n. Enforces 'Scorched Earth' strategy for sub-items."
             }
         ],
         "entry_points": [
             {
                 "file": "app/page.tsx",
-                "purpose": "Dashboard/Home route",
-                "trigger": "User navigation to /"
+                "purpose": "Root route (Dashboard). Handles authentication check (middleware) and script listing.",
+                "trigger": "Navigation to /"
             },
             {
                 "file": "app/[id]/page.tsx",
-                "purpose": "Individual Script Editor route",
-                "trigger": "Clicking a script card or creating a new script"
+                "purpose": "Script Detail Route. Fetches script + relations (intros, contextItems) for the Editor.",
+                "trigger": "Selection of a script card"
+            },
+            {
+                "file": "app/actions.ts",
+                "purpose": "RPC-style backend entry points.",
+                "trigger": "Form submissions and event handlers in Client Components"
             }
         ],
         "design_decisions": [
-            "Use of 'force-dynamic' in pages to bypass build-time DB connection requirements on deployment platforms locally resolving DNS",
-            "Scorched Earth strategy for 'Context Items' updates (delete all, re-insert active) to simplify sync logic in server actions",
-            "Direct DB access in Server Components instead of an API layer for simplicity and performance",
-            "Password-based simple cookie authentication to avoid complex auth provider overhead for a personal tool"
+            "Direct Database Access in Server Components: Reduces latency and complexity by removing the API serialization layer.",
+            "Scorched Earth Update Strategy: For 'Context Items', updates delete all existing records for a script and re-insert active ones to avoid complex diffing logic.",
+            "Force-Dynamic Rendering: Pages explicitly export `const dynamic = 'force-dynamic'` to prevent build-time static generation failures with database connections.",
+            "External AI Processing: AI logic is offloaded to n8n webhooks, keeping the Next.js backend lightweight and focused on orchestration."
         ]
     },
     "tech_stack": {
         "core": [
             {
-                "name": "Next.js 16",
-                "role": "Full-stack framework",
-                "why": "React Server Components, App Router, efficient routing"
+                "name": "Next.js 16.1.6",
+                "role": "Framework",
+                "why": "Cutting-edge RSC support and Server Actions for simplified state management"
             },
             {
-                "name": "Drizzle ORM",
-                "role": "Database interaction",
-                "why": "Type-safe, lightweight SQL builder"
+                "name": "React 19.2.3",
+                "role": "UI Library",
+                "why": "Required for Next.js 16, provides useTransition and optimized hydration"
             },
             {
                 "name": "Tailwind CSS v4",
                 "role": "Styling",
-                "why": "Utility-first, minimalist design implementation"
+                "why": "Zero-runtime CSS with modern utility features via @tailwindcss/postcss"
+            },
+            {
+                "name": "Drizzle ORM",
+                "role": "Data Access",
+                "why": "TypeScript-first SQL builder with zero runtime overhead compared to heavy ORMs"
             }
         ],
         "dependencies": [
             {
-                "name": "pg",
-                "purpose": "PostgreSQL client for Node.js"
-            },
-            {
                 "name": "sonner",
-                "purpose": "Toast notifications"
+                "purpose": "Toast notifications for feedback (e.g., 'Analysis complete')"
             },
             {
                 "name": "lucide-react",
-                "purpose": "Iconography"
+                "purpose": "Consistent, lightweight SVG iconography"
+            },
+            {
+                "name": "clsx / tailwind-merge",
+                "purpose": "Safe class name concatenation and conflict resolution"
             }
         ],
-        "infrastructure": "PostgreSQL (Neon/Railway), Vercel/Railway for deployment"
+        "infrastructure": "PostgreSQL (Neon/Railway), Vercel/Railway for hosting, N8n for AI workflows"
     },
     "file_organization": {
-        "philosophy": "Standard Next.js App Router structure with feature code inside `app` and shared utilities/db in `lib` and `db`.",
+        "philosophy": "Feature-based organization within `app` directory, with shared UI components in `components` and data/logic in `lib` and `db`.",
         "key_directories": [
             {
                 "path": "app",
-                "contains": "Routes, pages, and server actions",
+                "contains": "Route definitions (page.tsx), layouts, and Server Actions",
                 "important_files": [
                     {
                         "file": "actions.ts",
-                        "role": "Central file for all server-side mutations"
+                        "role": "Contains all mutation logic: login, createScript, updateScript, generateSuggestion"
                     },
                     {
                         "file": "page.tsx",
-                        "role": "Dashboard view"
+                        "role": "Dashboard implementation with searchParam filtering"
+                    }
+                ]
+            },
+            {
+                "path": "components",
+                "contains": "Client components and UI fragments",
+                "important_files": [
+                    {
+                        "file": "Editor.tsx",
+                        "role": "Complex client-side editor with auto-save and tab management"
+                    },
+                    {
+                        "file": "SuggestionDrawer.tsx",
+                        "role": "AI interaction UI sidebar"
                     }
                 ]
             },
             {
                 "path": "db",
-                "contains": "Database schema definition",
+                "contains": "Database schema and configuration",
                 "important_files": [
                     {
                         "file": "schema.ts",
-                        "role": "Drizzle table definitions (scripts, intros, contextItems)"
-                    }
-                ]
-            },
-            {
-                "path": "lib",
-                "contains": "Shared instances",
-                "important_files": [
-                    {
-                        "file": "db.ts",
-                        "role": "Database connection pool initialization"
+                        "role": "Drizzle definitions for scripts, intros, context_items, and suggestions"
                     }
                 ]
             }
         ],
         "conventions": {
-            "naming": "kebab-case for directories, camelCase for files/variables",
-            "structure": "Colocation of page logic, separation of server actions",
-            "imports": "Path aliases (@/*) used for cleaner imports"
+            "naming": "PascalCase for Components, camelCase for logic/variables, kebab-case for directories",
+            "structure": "Colocation of route-specific logic where possible, strictly typed interfaces",
+            "imports": "Use of `@/` path aliases for all internal imports"
         }
     },
     "development_guide": {
-        "working_with_this_codebase": "Updates mostly involve `app/actions.ts` for logic and `app/[id]/page.tsx` or `components/Editor.tsx` for UI. Ensure `force-dynamic` is preserved on pages querying the DB.",
+        "working_with_this_codebase": "Focus on `app/actions.ts` for backend logic and `components/Editor.tsx` for the primary UI. The data flow relies heavily on referencing database IDs (UUIDs) across relations.",
         "key_patterns": [
-            "All pages fetching data must export 'dynamic' = 'force-dynamic'",
-            "Mutations should use Server Actions defined in `app/actions.ts`",
-            "Database schemas are defined in `db/schema.ts` and require Drizzle Kit to push changes",
-            "Styling relies on `neutral` color palette in Tailwind for the minimalist look"
+            "Server Actions must validate inputs before DB operations.",
+            "Client components should use `useTransition` when calling Server Actions to show loading states.",
+            "All pages interacting with the DB must be `dynamic = 'force-dynamic'`.",
+            "AI features depend on valid n8n webhook usage; check `actions.ts` for endpoints."
         ],
         "common_tasks": [
             {
-                "task": "Add new script property",
-                "approach": "1. Update `db/schema.ts` 2. Run db push/migration 3. Update `app/actions.ts` (create/update) 4. Update UI in `components/Editor.tsx`"
+                "task": "Adding a new field to Scripts",
+                "approach": "1. Add to `db/schema.ts` 2. Run `npx drizzle-kit push` 3. Update `createScript`/`updateScript` in `actions.ts` 4. Update interactions in `Editor.tsx`"
             },
             {
-                "task": "Modify Dashboard filters",
-                "approach": "Update `whereClause` logic in `app/page.tsx` based on `searchParams`"
+                "task": "Modifying AI Prompts",
+                "approach": "Prompts are managed externally in the n8n workflow. To change behavior, update the n8n node config for the webhooks defined in `actions.ts`."
             }
         ],
         "critical_rules": [
-            "Do not remove 'force-dynamic' from pages (fixes build errors)",
-            "Always use cascading deletes for script-related tables (intros, contextItems) to maintain data integrity"
+            "Ensure UUIDs are correctly handled in `updateScript` to prevent orphan records.",
+            "Do not modify the `force-dynamic` export in `page.tsx`; it is required for deployment stability.",
+            "Maintain the separate `intros` and `contextItems` relation management strategy (delete-insert vs upsert) as defined in `actions.ts`."
         ],
         "gotchas": [
-            "The `updateScript` action deletes all related `contextItems` and re-inserts them on every save (Scorched Earth). Be mindful of this when adding persistent metadata to items."
+            "The 'Scorched Earth' strategy in `updateScript` deletes all context items and re-inserts them. This means stable IDs for context items are not guaranteed across saves.",
+            "n8n Webhook URLs are hardcoded in `actions.ts`; ensure these are reachable from the production environment."
         ]
     },
     "manual_notes": {
