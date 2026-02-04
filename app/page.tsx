@@ -43,12 +43,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
 
   return (
     <div className="min-h-screen bg-white dark:bg-black text-neutral-900 dark:text-neutral-100 font-sans">
-      <header className="w-full px-8 py-6 flex items-center justify-between border-b border-transparent">
-        <div className="flex items-center gap-8">
-          <h1 className="text-xl font-medium tracking-tighter text-neutral-900 dark:text-neutral-100">
-            Reel Scripter
-          </h1>
-          <nav className="flex items-center gap-6">
+      <header className="w-full px-4 md:px-8 py-4 md:py-6 flex items-center justify-between border-b border-transparent">
+        <div className="flex items-center gap-4 md:gap-8">
+          {/* Logo removed as requested */}
+          <nav className="flex items-center gap-4 md:gap-6">
             {tabs.map((t) => (
               <Link
                 key={t.id}

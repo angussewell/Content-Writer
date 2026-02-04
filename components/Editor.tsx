@@ -162,7 +162,7 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
     return (
         <div className="min-h-screen relative font-sans bg-white dark:bg-black text-neutral-900 dark:text-neutral-100 flex overflow-hidden">
             {/* Main Content */}
-            <div className={cn("flex-1 h-screen overflow-y-auto transition-all duration-300", isSidebarOpen ? "mr-80" : "mr-0")}>
+            <div className={cn("flex-1 h-screen overflow-y-auto transition-all duration-300", isSidebarOpen ? "md:mr-80" : "mr-0")}>
                 <SuggestionDrawer
                     isOpen={!!activeSuggestion.introId}
                     introId={activeSuggestion.introId}
