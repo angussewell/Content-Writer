@@ -160,9 +160,9 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
     };
 
     return (
-        <div className="min-h-screen relative font-sans bg-white dark:bg-black text-neutral-900 dark:text-neutral-100 flex overflow-hidden">
+        <div className="min-h-dvh relative font-sans bg-white dark:bg-black text-neutral-900 dark:text-neutral-100 flex">
             {/* Main Content */}
-            <div className={cn("flex-1 h-screen overflow-y-auto transition-all duration-300", isSidebarOpen ? "md:mr-80" : "mr-0")}>
+            <div className={cn("flex-1 transition-all duration-300", isSidebarOpen ? "md:mr-80" : "mr-0")}>
                 <SuggestionDrawer
                     isOpen={!!activeSuggestion.introId}
                     introId={activeSuggestion.introId}
@@ -171,15 +171,15 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                     onClose={() => setActiveSuggestion({ introId: null, type: null, text: "" })}
                 />
 
-                <header className="w-full px-8 py-4 flex items-center justify-between sticky top-0 bg-white/80 dark:bg-black/80 backdrop-blur-md z-10 border-b border-transparent">
+                <header className="w-full px-4 md:px-8 py-3 md:py-4 flex items-center justify-between sticky top-0 bg-white/80 dark:bg-black/80 backdrop-blur-md z-10 border-b border-transparent">
                     <Link
                         href="/"
-                        className="text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
+                        className="text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors shrink-0"
                     >
                         <ArrowLeft size={20} />
                     </Link>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1 md:gap-3 flex-wrap justify-end">
                         {/* Status Select */}
                         <div className="relative group">
                             <select
@@ -228,11 +228,11 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                             <Copy size={20} />
                         </button>
 
-                        <div className="w-px h-6 bg-neutral-200 dark:bg-neutral-800 mx-1" />
+                        <div className="w-px h-6 bg-neutral-200 dark:bg-neutral-800 mx-1 hidden sm:block" />
                         <button
                             onClick={handleSave}
                             disabled={isPending}
-                            className="flex items-center gap-2 bg-neutral-900 text-neutral-50 dark:bg-neutral-100 dark:text-neutral-900 px-4 py-2 rounded-full text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-all font-sans"
+                            className="flex items-center gap-1.5 md:gap-2 bg-neutral-900 text-neutral-50 dark:bg-neutral-100 dark:text-neutral-900 px-3 md:px-4 py-1.5 md:py-2 rounded-full text-xs md:text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-all font-sans shrink-0"
                         >
                             {isPending ? "Saving..." : (
                                 <>
@@ -242,12 +242,12 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                             )}
                         </button>
 
-                        <div className="w-px h-6 bg-neutral-200 dark:bg-neutral-800 mx-1" />
+                        <div className="w-px h-6 bg-neutral-200 dark:bg-neutral-800 mx-1 hidden sm:block" />
 
                         {/* Sidebar Toggle */}
                         <button
                             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                            className={cn("text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors p-2 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-900", isSidebarOpen && "bg-neutral-100 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100")}
+                            className={cn("text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors p-1.5 md:p-2 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-900 shrink-0", isSidebarOpen && "bg-neutral-100 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100")}
                             title="Toggle Sidebar"
                         >
                             <PanelRightOpen size={20} />
@@ -255,14 +255,14 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                     </div>
                 </header>
 
-                <main className="max-w-4xl mx-auto p-6 md:p-12 pb-32">
-                    <div className="space-y-12">
+                <main className="w-full max-w-4xl mx-auto px-4 md:px-12 py-6 md:py-12 pb-32 overflow-x-hidden">
+                    <div className="space-y-8 md:space-y-12">
                         {/* Title */}
                         <TextareaAutosize
                             placeholder="Untitled Script"
                             value={data.title}
                             onChange={(e) => setData({ ...data, title: e.target.value })}
-                            className="w-full text-5xl font-bold bg-transparent border-none placeholder:text-neutral-300 dark:placeholder:text-neutral-700 outline-none resize-none"
+                            className="w-full text-3xl md:text-5xl font-bold bg-transparent border-none placeholder:text-neutral-300 dark:placeholder:text-neutral-700 outline-none resize-none break-words whitespace-pre-wrap"
                         />
 
                         {/* Intros Section */}
@@ -275,9 +275,9 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                             </div>
                             <div className="space-y-8">
                                 {data.intros.map((intro, index) => (
-                                    <div key={intro.id} className="group relative pl-4 border-l-2 border-neutral-200 dark:border-neutral-800 transition-colors hover:border-neutral-300 dark:hover:border-neutral-600">
-                                        <div className="absolute top-0 -left-8 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button onClick={() => removeIntro(intro.id)} className="text-neutral-300 hover:text-red-500 p-2">
+                                    <div key={intro.id} className="group relative pl-3 md:pl-4 border-l-2 border-neutral-200 dark:border-neutral-800 transition-colors hover:border-neutral-300 dark:hover:border-neutral-600">
+                                        <div className="absolute top-0 right-0 md:left-auto md:-ml-12 md:top-0 md:-left-8 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                                            <button onClick={() => removeIntro(intro.id)} className="text-neutral-400 hover:text-red-500 p-2 bg-white/50 dark:bg-black/50 md:bg-transparent rounded-full backdrop-blur-sm md:backdrop-blur-none">
                                                 <Trash2 size={16} />
                                             </button>
                                         </div>
@@ -287,11 +287,11 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                                                     placeholder="Title Hook (Text on screen)..."
                                                     value={intro.titleHook}
                                                     onChange={(e) => updateIntro(intro.id, "titleHook", e.target.value)}
-                                                    className="w-full bg-transparent text-2xl font-semibold outline-none resize-none placeholder:text-neutral-300 dark:placeholder:text-neutral-700 pr-10"
+                                                    className="w-full bg-transparent text-xl md:text-2xl font-semibold outline-none resize-none placeholder:text-neutral-300 dark:placeholder:text-neutral-700 pr-10 break-words whitespace-pre-wrap"
                                                 />
                                                 <button
                                                     onClick={() => openSuggestion(intro, "hook")}
-                                                    className="absolute right-0 top-1 text-neutral-300 hover:text-amber-400 opacity-0 group-hover/input:opacity-100 transition-all p-1"
+                                                    className="absolute right-0 top-1 text-neutral-300 hover:text-amber-400 opacity-100 md:opacity-0 group-hover/input:opacity-100 transition-all p-1"
                                                     title="AI Suggestions"
                                                 >
                                                     <Sparkles size={16} />
@@ -302,11 +302,11 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                                                     placeholder="Verbal Intro (What you say)..."
                                                     value={intro.verbalIntro}
                                                     onChange={(e) => updateIntro(intro.id, "verbalIntro", e.target.value)}
-                                                    className="w-full bg-transparent text-lg text-neutral-600 dark:text-neutral-300 outline-none resize-none placeholder:text-neutral-300 dark:placeholder:text-neutral-700 font-normal leading-relaxed pr-10"
+                                                    className="w-full bg-transparent text-base md:text-lg text-neutral-600 dark:text-neutral-300 outline-none resize-none placeholder:text-neutral-300 dark:placeholder:text-neutral-700 font-normal leading-relaxed pr-10 break-words whitespace-pre-wrap"
                                                 />
                                                 <button
                                                     onClick={() => openSuggestion(intro, "intro")}
-                                                    className="absolute right-0 top-1 text-neutral-300 hover:text-amber-400 opacity-0 group-hover/input:opacity-100 transition-all p-1"
+                                                    className="absolute right-0 top-1 text-neutral-300 hover:text-amber-400 opacity-100 md:opacity-0 group-hover/input:opacity-100 transition-all p-1"
                                                     title="AI Suggestions"
                                                 >
                                                     <Sparkles size={16} />
@@ -332,7 +332,7 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                                 placeholder="Write your script body here..."
                                 value={data.body}
                                 onChange={(e) => setData({ ...data, body: e.target.value })}
-                                className="w-full text-lg leading-relaxed bg-transparent border-none placeholder:text-neutral-300 dark:placeholder:text-neutral-700 outline-none resize-none font-serif-video"
+                                className="w-full text-base md:text-lg leading-relaxed bg-transparent border-none placeholder:text-neutral-300 dark:placeholder:text-neutral-700 outline-none resize-none font-serif-video break-words whitespace-pre-wrap"
                                 minRows={10}
                             />
                         </section>

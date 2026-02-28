@@ -42,9 +42,9 @@ export default function RightSidebar({ isOpen, onToggle, children, activeTab, on
                     // Base transition & positioning
                     "fixed right-0 transition-transform duration-300 ease-in-out flex flex-col bg-neutral-50 dark:bg-neutral-950 border-l border-neutral-200 dark:border-neutral-800",
                     // Mobile Styles (< md)
-                    "z-50 top-0 bottom-0 w-[85vw] max-w-[320px] shadow-2xl",
+                    "z-50 top-0 h-[100dvh] w-[85vw] max-w-[320px] shadow-2xl",
                     // Desktop Styles (md+)
-                    "md:top-[73px] md:bottom-0 md:w-80 md:z-20 md:shadow-none",
+                    "md:top-[73px] md:h-[calc(100dvh-73px)] md:w-80 md:z-20 md:shadow-none",
                     // Transform State
                     isOpen ? "translate-x-0" : "translate-x-full"
                 )}

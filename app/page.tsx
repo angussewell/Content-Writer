@@ -42,7 +42,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   ];
 
   return (
-    <div className="min-h-screen bg-white dark:bg-black text-neutral-900 dark:text-neutral-100 font-sans">
+    <div className="min-h-dvh bg-white dark:bg-black text-neutral-900 dark:text-neutral-100 font-sans">
       <header className="w-full px-4 md:px-8 py-4 md:py-6 flex items-center justify-between border-b border-transparent">
         <div className="flex items-center gap-4 md:gap-8">
           {/* Logo removed as requested */}
@@ -74,8 +74,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         </form>
       </header>
 
-      <main className="max-w-6xl mx-auto p-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <main className="max-w-6xl mx-auto px-4 py-6 md:p-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
           {allScripts.length === 0 ? (
             <div className="col-span-full text-center py-20 text-neutral-400 border border-dashed border-neutral-200 dark:border-neutral-800 rounded-xl">
               <p className="mb-4">No scripts in {currentTab}.</p>

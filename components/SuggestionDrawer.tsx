@@ -80,7 +80,7 @@ export default function SuggestionDrawer({ introId, type, currentText, isOpen, o
             <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 transition-opacity" onClick={onClose} />
 
             {/* Drawer */}
-            <div className="fixed top-0 right-0 h-full w-[400px] bg-white dark:bg-neutral-950 shadow-2xl z-50 border-l border-neutral-200 dark:border-neutral-800 flex flex-col transform transition-transform duration-300 ease-in-out animate-in slide-in-from-right">
+            <div className="fixed top-0 right-0 h-[100dvh] w-[400px] max-w-full bg-white dark:bg-neutral-950 shadow-2xl z-50 border-l border-neutral-200 dark:border-neutral-800 flex flex-col transform transition-transform duration-300 ease-in-out animate-in slide-in-from-right">
                 {/* Header */}
                 <div className="p-6 border-b border-neutral-100 dark:border-neutral-900 flex items-center justify-between bg-white/50 dark:bg-black/50 backdrop-blur-md">
                     <h2 className="text-lg font-bold flex items-center gap-2">
