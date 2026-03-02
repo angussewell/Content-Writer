@@ -276,7 +276,7 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                             <div className="space-y-8">
                                 {data.intros.map((intro, index) => (
                                     <div key={intro.id} className="group relative pl-3 md:pl-4 border-l-2 border-neutral-200 dark:border-neutral-800 transition-colors hover:border-neutral-300 dark:hover:border-neutral-600">
-                                        <div className="absolute top-0 right-0 md:left-auto md:-ml-12 md:top-0 md:-left-8 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                                        <div className="absolute top-0 right-8 md:right-auto md:left-auto md:-ml-12 md:top-0 md:-left-8 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity z-10">
                                             <button onClick={() => removeIntro(intro.id)} className="text-neutral-400 hover:text-red-500 p-2 bg-white/50 dark:bg-black/50 md:bg-transparent rounded-full backdrop-blur-sm md:backdrop-blur-none">
                                                 <Trash2 size={16} />
                                             </button>
@@ -287,7 +287,7 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                                                     placeholder="Title Hook (Text on screen)..."
                                                     value={intro.titleHook}
                                                     onChange={(e) => updateIntro(intro.id, "titleHook", e.target.value)}
-                                                    className="w-full bg-transparent text-xl md:text-2xl font-semibold outline-none resize-none placeholder:text-neutral-300 dark:placeholder:text-neutral-700 pr-10 break-words whitespace-pre-wrap"
+                                                    className="w-full bg-transparent text-xl md:text-2xl font-semibold outline-none resize-none placeholder:text-neutral-300 dark:placeholder:text-neutral-700 pr-20 md:pr-10 break-words whitespace-pre-wrap"
                                                 />
                                                 <button
                                                     onClick={() => openSuggestion(intro, "hook")}
