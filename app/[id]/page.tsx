@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 export const dynamic = "force-dynamic";
-import { scripts, intros, contextItems, scriptImages } from "@/db/schema";
+import { scripts, intros, contextItems, scriptImages, scriptFeedback } from "@/db/schema";
 import { eq, asc, desc } from "drizzle-orm";
 import Editor from "@/components/Editor";
 import { notFound } from "next/navigation";
@@ -32,6 +32,11 @@ export default async function ScriptPage({ params }: { params: Promise<{ id: str
         orderBy: desc(scriptImages.createdAt),
     });
 
+    const feedbackRows = await db.query.scriptFeedback.findMany({
+        where: eq(scriptFeedback.scriptId, id),
+        orderBy: asc(scriptFeedback.roundNumber),
+    });
+
     return (
         <>
             <Toaster position="top-center" />
@@ -41,6 +46,8 @@ export default async function ScriptPage({ params }: { params: Promise<{ id: str
                     title: script.title,
                     body: script.body || "",
                     status: script.status as any, // Cast to match interface in Editor
+                    editStatus: script.editStatus as "idle" | "needs_ai_edit" | "ai_editing",
+                    editClaimedAt: script.editClaimedAt,
                     intros: scriptIntros.map((i): any => ({
                         id: i.id,
                         titleHook: i.titleHook || "",
@@ -55,6 +62,13 @@ export default async function ScriptPage({ params }: { params: Promise<{ id: str
                         imageUrl: img.imageUrl,
                         prompt: img.prompt,
                         createdAt: img.createdAt,
+                    })),
+                    feedback: feedbackRows.map((f) => ({
+                        id: f.id,
+                        content: f.content,
+                        roundNumber: f.roundNumber,
+                        createdAt: f.createdAt,
+                        addressedAt: f.addressedAt,
                     })),
                 }}
             />

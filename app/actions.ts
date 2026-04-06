@@ -4,8 +4,8 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { scripts, intros, contextItems, suggestions, scriptImages } from "@/db/schema";
-import { eq, notInArray, and, inArray, desc } from "drizzle-orm";
+import { scripts, intros, contextItems, suggestions, scriptImages, scriptFeedback } from "@/db/schema";
+import { eq, notInArray, and, inArray, desc, sql } from "drizzle-orm";
 
 export async function login(prevState: any, formData: FormData) {
     const password = formData.get("password") as string;
@@ -257,4 +257,55 @@ export async function deleteScriptImage(imageId: string) {
     } catch (e) {
         return { error: "Failed to delete image" };
     }
+}
+
+export async function saveFeedback(scriptId: string, content: string) {
+    if (!content.trim()) {
+        return { error: "Feedback cannot be empty" };
+    }
+
+    const result = await db.execute(sql`
+        INSERT INTO script_feedback (script_id, content, round_number)
+        SELECT ${scriptId}::uuid, ${content}, COALESCE(MAX(round_number), 0) + 1
+        FROM script_feedback
+        WHERE script_id = ${scriptId}::uuid
+        RETURNING id, round_number, created_at
+    `);
+    const inserted = result.rows[0];
+
+    await db.execute(sql`
+        UPDATE scripts
+        SET edit_status = 'needs_ai_edit', updated_at = now()
+        WHERE id = ${scriptId}::uuid
+          AND edit_status = 'idle'
+    `);
+
+    revalidatePath(`/${scriptId}`);
+    revalidatePath("/");
+    return { success: true, feedback: inserted };
+}
+
+export async function forceReleaseEditClaim(scriptId: string) {
+    await db.execute(sql`
+        UPDATE scripts
+        SET edit_status = 'needs_ai_edit',
+            edit_claimed_at = NULL,
+            edit_claimed_by = NULL,
+            updated_at = now()
+        WHERE id = ${scriptId}::uuid
+          AND edit_status = 'ai_editing'
+    `);
+    revalidatePath(`/${scriptId}`);
+    revalidatePath("/");
+    return { success: true };
+}
+
+export async function deleteFeedback(feedbackId: string, scriptId: string) {
+    await db.execute(sql`
+        DELETE FROM script_feedback
+        WHERE id = ${feedbackId}::uuid
+          AND addressed_at IS NULL
+    `);
+    revalidatePath(`/${scriptId}`);
+    return { success: true };
 }

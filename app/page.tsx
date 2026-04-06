@@ -1,7 +1,6 @@
 import { db } from "@/lib/db";
 export const dynamic = "force-dynamic";
-import { scripts } from "@/db/schema";
-import { desc, eq, or, and, inArray } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import Link from "next/link";
 import { Plus, CheckCircle2 } from "lucide-react";
 import { createScript, updateScriptStatus } from "./actions";
@@ -13,27 +12,27 @@ import { clsx } from "clsx";
 // I'll use raw date or simple Intl format to avoid deps if possible, but date-fns is standard.
 // Let's use a simple Intl formatter to keep it light.
 
-function formatDate(date: Date) {
+function formatDate(date: Date | string) {
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
-  }).format(date);
+  }).format(new Date(date));
 }
 
-export default async function Dashboard({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
-  const { tab } = await searchParams;
+export default async function Dashboard({ searchParams }: { searchParams: Promise<{ tab?: string; feedback?: string }> }) {
+  const { tab, feedback: feedbackFilter } = await searchParams;
   const currentTab = tab || "write";
 
-  let whereClause;
-  if (currentTab === "write") {
-    whereClause = eq(scripts.status, "draft");
-  } else if (currentTab === "edit") {
-    whereClause = eq(scripts.status, "filmed");
-  } else if (currentTab === "archive") {
-    whereClause = inArray(scripts.status, ["done", "archived"]);
-  }
-
-  const allScripts = await db.select().from(scripts).where(whereClause).orderBy(desc(scripts.createdAt));
+  const result = await db.execute(sql`
+    SELECT s.id, s.title, s.body, s.status, s.edit_status, s.created_at, s.updated_at,
+      (SELECT COUNT(*)::int FROM script_feedback sf
+       WHERE sf.script_id = s.id AND sf.addressed_at IS NULL) as pending_feedback_count
+    FROM scripts s
+    WHERE ${currentTab === "write" ? sql`s.status = 'draft'` : currentTab === "edit" ? sql`s.status = 'filmed'` : sql`s.status IN ('done', 'archived')`}
+    ${feedbackFilter === "1" ? sql`AND (s.edit_status != 'idle' OR (SELECT COUNT(*) FROM script_feedback sf2 WHERE sf2.script_id = s.id AND sf2.addressed_at IS NULL) > 0)` : sql``}
+    ORDER BY s.updated_at DESC
+  `);
+  const allScripts = result.rows as { id: string; title: string; body: string; status: string; edit_status: string; created_at: Date; updated_at: Date; pending_feedback_count: number }[];
 
   const tabs = [
     { id: "write", label: "Write" },
@@ -75,6 +74,19 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-6 md:p-8">
+        <div className="flex items-center gap-2 mb-4">
+          <Link
+            href={feedbackFilter === "1" ? `/?tab=${currentTab}` : `/?tab=${currentTab}&feedback=1`}
+            className={clsx(
+              "text-xs font-medium px-3 py-1.5 rounded-full border transition-colors",
+              feedbackFilter === "1"
+                ? "bg-neutral-900 dark:bg-neutral-100 text-white dark:text-black border-transparent"
+                : "bg-transparent text-neutral-500 border-neutral-200 dark:border-neutral-800 hover:border-neutral-400 dark:hover:border-neutral-600"
+            )}
+          >
+            Feedback loop activity
+          </Link>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
           {allScripts.length === 0 ? (
             <div className="col-span-full text-center py-20 text-neutral-400 border border-dashed border-neutral-200 dark:border-neutral-800 rounded-xl">
@@ -96,15 +108,36 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
                 >
                   <article className="h-full flex flex-col justify-between border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 transition-all duration-200 hover:border-neutral-400 dark:hover:border-neutral-600 hover:shadow-sm bg-white dark:bg-neutral-900/50">
                     <div>
-                      <h2 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100 truncate mb-2">
-                        {script.title || "Untitled"}
-                      </h2>
+                      <div className="flex items-center gap-2 mb-2">
+                        <h2 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100 truncate">
+                          {script.title || "Untitled"}
+                        </h2>
+                        {script.pending_feedback_count > 0 && (
+                          <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
+                            {script.pending_feedback_count} pending
+                          </span>
+                        )}
+                      </div>
                       <p className="text-sm text-neutral-500 dark:text-neutral-400 line-clamp-3 leading-relaxed">
                         {script.body || "No content yet..."}
                       </p>
                     </div>
                     <div className="mt-6 pt-4 border-t border-neutral-100 dark:border-neutral-900/50 flex items-center justify-between text-xs text-neutral-400 font-medium">
-                      <time>{formatDate(script.createdAt)}</time>
+                      <div className="flex items-center gap-2">
+                        <time>{formatDate(script.created_at)}</time>
+                        {script.edit_status === "needs_ai_edit" && (
+                          <span className="flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                            AI edit queued
+                          </span>
+                        )}
+                        {script.edit_status === "ai_editing" && (
+                          <span className="flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                            AI editing
+                          </span>
+                        )}
+                      </div>
                       <span className="capitalize px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-500 text-[10px]">
                         {script.status}
                       </span>

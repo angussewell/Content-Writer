@@ -7,6 +7,8 @@ import SuggestionDrawer from "./SuggestionDrawer";
 import RightSidebar from "./RightSidebar";
 import ImageGenerator from "./ImageGenerator";
 import ImageGallery from "./ImageGallery";
+import FeedbackPanel from "./FeedbackPanel";
+import type { FeedbackItem } from "./FeedbackPanel";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -39,9 +41,12 @@ interface ScriptData {
     title: string;
     body: string;
     status: "draft" | "filmed" | "done" | "archived";
+    editStatus: "idle" | "needs_ai_edit" | "ai_editing";
+    editClaimedAt: Date | null;
     intros: Intro[];
     contextItems?: ContextItem[];
     scriptImages?: ScriptImage[];
+    feedback?: FeedbackItem[];
 }
 
 export default function Editor({ initialData }: { initialData: ScriptData }) {
@@ -51,7 +56,7 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
     const router = useRouter();
 
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-    const [sidebarTab, setSidebarTab] = useState<"context" | "assets">("assets");
+    const [sidebarTab, setSidebarTab] = useState<"context" | "assets" | "feedback">("assets");
 
     const openSuggestion = (intro: Intro, type: "hook" | "intro") => {
         if (intro.isNew) {
@@ -346,8 +351,17 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                 onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
                 activeTab={sidebarTab}
                 onTabChange={setSidebarTab}
+                showFeedbackTab={data.status !== "archived"}
+                pendingFeedbackCount={(data.feedback || []).filter(f => !f.addressedAt).length}
             >
-                {sidebarTab === "context" ? (
+                {sidebarTab === "feedback" && data.status !== "archived" ? (
+                    <FeedbackPanel
+                        scriptId={data.id}
+                        editStatus={data.editStatus}
+                        editClaimedAt={data.editClaimedAt}
+                        feedback={data.feedback || []}
+                    />
+                ) : sidebarTab === "context" ? (
                     <div className="space-y-4 animate-in fade-in duration-300">
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="text-sm font-semibold text-neutral-500 uppercase tracking-wider">Script Context</h3>

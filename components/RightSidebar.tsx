@@ -2,17 +2,21 @@
 
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
-import { ChevronRight, ChevronsRight, StickyNote, Image as ImageIcon, X } from "lucide-react";
+import { ChevronRight, ChevronsRight, StickyNote, Image as ImageIcon, X, MessageSquare } from "lucide-react";
+
+type SidebarTab = "context" | "assets" | "feedback";
 
 interface RightSidebarProps {
     isOpen: boolean;
     onToggle: () => void;
     children: React.ReactNode;
-    activeTab: "context" | "assets";
-    onTabChange: (tab: "context" | "assets") => void;
+    activeTab: SidebarTab;
+    onTabChange: (tab: SidebarTab) => void;
+    showFeedbackTab?: boolean;
+    pendingFeedbackCount?: number;
 }
 
-export default function RightSidebar({ isOpen, onToggle, children, activeTab, onTabChange }: RightSidebarProps) {
+export default function RightSidebar({ isOpen, onToggle, children, activeTab, onTabChange, showFeedbackTab, pendingFeedbackCount }: RightSidebarProps) {
     // Scroll Lock Effect for Mobile
     useEffect(() => {
         if (isOpen && window.innerWidth < 768) {
@@ -75,6 +79,25 @@ export default function RightSidebar({ isOpen, onToggle, children, activeTab, on
                         <StickyNote size={16} />
                         <span>Context</span>
                     </button>
+                    {showFeedbackTab && (
+                        <button
+                            onClick={() => onTabChange("feedback")}
+                            className={cn(
+                                "flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors border-b-2 relative",
+                                activeTab === "feedback"
+                                    ? "text-neutral-900 dark:text-neutral-100 border-neutral-900 dark:border-neutral-100"
+                                    : "text-neutral-500 dark:text-neutral-400 border-transparent hover:text-neutral-700 dark:hover:text-neutral-300"
+                            )}
+                        >
+                            <MessageSquare size={16} />
+                            <span>Feedback</span>
+                            {(pendingFeedbackCount ?? 0) > 0 && (
+                                <span className="absolute -top-0.5 right-1 min-w-[16px] h-4 flex items-center justify-center text-[10px] font-bold bg-amber-400 text-amber-900 rounded-full px-1">
+                                    {pendingFeedbackCount}
+                                </span>
+                            )}
+                        </button>
+                    )}
 
                     {/* Desktop Collapse Button */}
                     <button
