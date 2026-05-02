@@ -215,7 +215,7 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
         setData({ ...data, status: newStatus as ScriptData["status"] });
         setStatusOpen(false);
         startTransition(async () => {
-            await updateScriptStatus(data.id, newStatus);
+            await updateScriptStatus(data.id, newStatus as "draft" | "filmed" | "done" | "archived");
             toast.success("Status updated");
         });
     };
