@@ -1,26 +1,24 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useMemo, useEffect, useCallback, useRef, type JSX } from "react";
 import TextareaAutosize from "react-textarea-autosize";
-import { ArrowLeft, Save, Plus, Trash2, ChevronDown, Sparkles, Copy, PanelRightOpen } from "lucide-react";
-import SuggestionDrawer from "./SuggestionDrawer";
-import RightSidebar from "./RightSidebar";
-import ImageGenerator from "./ImageGenerator";
-import ImageGallery from "./ImageGallery";
-import FeedbackPanel from "./FeedbackPanel";
-import type { FeedbackItem } from "./FeedbackPanel";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { updateScript, deleteScript, updateScriptStatus } from "@/app/actions";
-import { cn } from "@/lib/utils";
+import { updateScript, updateScriptStatus } from "@/app/actions";
+import SuggestionDrawer from "./SuggestionDrawer";
+import { FeedbackDock, FeedbackTrigger } from "./FeedbackDock";
+import { AssetsOverlay, AssetsTrigger } from "./AssetsOverlay";
+import ContextRail from "./ContextRail";
+import type { FeedbackItem } from "./FeedbackDock";
+
+/* ── Types ── */
 
 interface Intro {
-    id: string; // can be uuid or temp id
+    id: string;
     titleHook: string;
     verbalIntro: string;
     isNew?: boolean;
-    isDeleted?: boolean;
 }
 
 interface ContextItem {
@@ -49,362 +47,495 @@ interface ScriptData {
     feedback?: FeedbackItem[];
 }
 
+/* ── Body parsing ── */
+
+// Matches a full paragraph that is entirely a directive
+const BLOCK_DIRECTIVE_RE = /^\s*\[On-screen(?:\s+text)?:\s*(.+?)\]\s*$/i;
+// Matches inline directives within a paragraph
+const INLINE_DIRECTIVE_RE = /\[On-screen(?:\s+text)?:\s*(.+?)\]/gi;
+
+type Token = { type: "text"; text: string } | { type: "directive"; text: string };
+
+function tokenizeParagraph(text: string): Token[] {
+    const tokens: Token[] = [];
+    const re = /\[On-screen(?:\s+text)?:\s*(.+?)\]/gi;
+    let last = 0, m;
+    while ((m = re.exec(text)) !== null) {
+        if (m.index > last) tokens.push({ type: "text", text: text.slice(last, m.index) });
+        tokens.push({ type: "directive", text: m[1].trim() });
+        last = m.index + m[0].length;
+    }
+    if (last < text.length) tokens.push({ type: "text", text: text.slice(last) });
+    return tokens;
+}
+
+type BodyBlock =
+    | { kind: "directive"; text: string; key: number }
+    | { kind: "para"; tokens: Token[]; key: number };
+
+function parseBody(body: string): BodyBlock[] {
+    const paragraphs = body.split(/\n{2,}/).map((s) => s.trimEnd()).filter(Boolean);
+    return paragraphs.map((p, idx) => {
+        const m = p.match(BLOCK_DIRECTIVE_RE);
+        if (m) return { kind: "directive" as const, text: m[1].trim(), key: idx };
+        return { kind: "para" as const, tokens: tokenizeParagraph(p), key: idx };
+    });
+}
+
+function OnscreenPill({ text }: { text: string }) {
+    const words = text.split(/\s+/);
+    const preview = words.slice(0, 6).join(" ");
+    const truncated = words.length > 6;
+    return (
+        <span className="cw-onscreen-pill" data-full={text}>
+            <span className="cw-onscreen-pill__key">On-screen</span>
+            <span className="cw-onscreen-pill__text">{preview}{truncated ? "…" : ""}</span>
+        </span>
+    );
+}
+
+/* ── Inline SVG icons ── */
+
+const ArrowIcon = () => (
+    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M15 18l-6-6 6-6" />
+    </svg>
+);
+const ChevIcon = () => (
+    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M6 9l6 6 6-6" />
+    </svg>
+);
+const CheckIcon = () => (
+    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20 6L9 17l-5-5" />
+    </svg>
+);
+const CopyIcon = () => (
+    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+        <rect x="9" y="9" width="13" height="13" rx="2" />
+        <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+    </svg>
+);
+const PlusIcon = () => (
+    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 5v14M5 12h14" />
+    </svg>
+);
+const TrashIcon = () => (
+    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+    </svg>
+);
+const SparkIcon = () => (
+    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8" />
+    </svg>
+);
+const PenIcon = () => (
+    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+    </svg>
+);
+
+/* ── Status colors ── */
+const STATUS_COLORS: Record<string, string> = {
+    draft: "#c69a3b",
+    filmed: "#5b7a4a",
+    done: "#3f6b8a",
+    archived: "var(--ink-3)",
+};
+
+/* ── Editor component ── */
+
 export default function Editor({ initialData }: { initialData: ScriptData }) {
     const [data, setData] = useState<ScriptData>(initialData);
     const [isPending, startTransition] = useTransition();
-    const [activeSuggestion, setActiveSuggestion] = useState<{ introId: string | null, type: "hook" | "intro" | null, text: string }>({ introId: null, type: null, text: "" });
+    const [statusOpen, setStatusOpen] = useState(false);
+    const [bodyEditing, setBodyEditing] = useState(false);
+    const [assetsOpen, setAssetsOpen] = useState(false);
+    const [feedbackOpen, setFeedbackOpen] = useState(false);
+    const [contextOpen, setContextOpen] = useState(false);
+    const [activeSuggestion, setActiveSuggestion] = useState<{ introId: string | null; type: "hook" | "intro" | null; text: string }>({ introId: null, type: null, text: "" });
+    const bodyTaRef = useRef<HTMLTextAreaElement>(null);
     const router = useRouter();
 
-    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-    const [sidebarTab, setSidebarTab] = useState<"context" | "assets" | "feedback">("assets");
+    const wordCount = useMemo(() => {
+        const text = [data.title, ...data.intros.map((i) => i.titleHook + " " + i.verbalIntro), data.body].join(" ");
+        return text.replace(/\[On-screen text:[^\]]*\]/gi, "").split(/\s+/).filter(Boolean).length;
+    }, [data]);
 
-    const openSuggestion = (intro: Intro, type: "hook" | "intro") => {
-        if (intro.isNew) {
-            toast.error("Please save the script before using AI suggestions.");
-            return;
-        }
-        setActiveSuggestion({
-            introId: intro.id,
-            type,
-            text: type === "hook" ? intro.titleHook : intro.verbalIntro
-        });
-    };
+    const bodyBlocks = useMemo(() => parseBody(data.body), [data.body]);
+    const onScreenCount = bodyBlocks.filter((b) => b.kind === "directive").length;
+    const openFeedbackCount = (data.feedback || []).filter((f) => !f.addressedAt).length;
+
+    useEffect(() => {
+        if (bodyEditing) requestAnimationFrame(() => bodyTaRef.current?.focus());
+    }, [bodyEditing]);
+
+    // ⌘S to save
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+                e.preventDefault();
+                handleSave();
+            }
+        };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, [data]);
 
     const handleSave = () => {
-        // Ensure we always have an array, even if empty
-        const payloadContextItems = data.contextItems || [];
-
-        console.log("Saving script. sending contextItems:", payloadContextItems);
-
         startTransition(async () => {
             try {
                 await updateScript(data.id, {
                     title: data.title,
                     body: data.body,
                     intros: data.intros,
-                    contextItems: payloadContextItems,
+                    contextItems: data.contextItems || [],
                 });
                 toast.success("Saved");
-                router.refresh(); // Refresh to ensure server data is synced
-            } catch (e) {
-                console.error("Failed to save script:", e);
+                router.refresh();
+            } catch {
                 toast.error("Failed to save");
             }
         });
     };
 
     const handleCopy = () => {
-        const textToCopy = [
-            ...data.intros.map(intro => intro.verbalIntro).filter(Boolean),
-            data.body
+        const text = [
+            ...data.intros.map((i) => i.verbalIntro).filter(Boolean),
+            data.body,
         ].filter(Boolean).join("\n\n");
+        navigator.clipboard.writeText(text);
+        toast.success("Copied to clipboard");
+    };
 
-        navigator.clipboard.writeText(textToCopy);
-        toast.success("Script copied to clipboard");
+    const handleStatus = (newStatus: string) => {
+        setData({ ...data, status: newStatus as ScriptData["status"] });
+        setStatusOpen(false);
+        startTransition(async () => {
+            await updateScriptStatus(data.id, newStatus);
+            toast.success("Status updated");
+        });
     };
 
     const addIntro = () => {
         setData((prev) => ({
             ...prev,
-            intros: [
-                ...prev.intros,
-                {
-                    id: crypto.randomUUID(), // temp ID
-                    titleHook: "",
-                    verbalIntro: "",
-                    isNew: true,
-                },
-            ],
+            intros: [...prev.intros, { id: crypto.randomUUID(), titleHook: "", verbalIntro: "", isNew: true }],
         }));
     };
 
     const updateIntro = (id: string, field: "titleHook" | "verbalIntro", value: string) => {
         setData((prev) => ({
             ...prev,
-            intros: prev.intros.map((intro) =>
-                intro.id === id ? { ...intro, [field]: value } : intro
-            ),
+            intros: prev.intros.map((i) => (i.id === id ? { ...i, [field]: value } : i)),
         }));
     };
 
     const removeIntro = (id: string) => {
-        setData((prev) => ({
-            ...prev,
-            intros: prev.intros.filter((i) => i.id !== id),
-        }));
+        setData((prev) => ({ ...prev, intros: prev.intros.filter((i) => i.id !== id) }));
     };
 
-    const addContextItem = () => {
-        setData((prev) => ({
-            ...prev,
-            contextItems: [
-                ...(prev.contextItems || []),
-                {
-                    id: crypto.randomUUID(),
-                    content: "",
-                    isNew: true,
-                },
-            ],
-        }));
+    const openSuggestion = (intro: Intro, type: "hook" | "intro") => {
+        if (intro.isNew) { toast.error("Save the script first."); return; }
+        setActiveSuggestion({ introId: intro.id, type, text: type === "hook" ? intro.titleHook : intro.verbalIntro });
     };
 
-    const updateContextItem = (id: string, value: string) => {
-        setData((prev) => ({
-            ...prev,
-            contextItems: (prev.contextItems || []).map((item) =>
-                item.id === id ? { ...item, content: value } : item
-            ),
-        }));
-    };
-
-    const removeContextItem = (id: string) => {
-        setData((prev) => ({
-            ...prev,
-            contextItems: (prev.contextItems || []).filter((i) => i.id !== id),
-        }));
-    };
+    const statuses = ["draft", "filmed", "done", "archived"];
 
     return (
-        <div className="min-h-dvh relative font-sans bg-white dark:bg-black text-neutral-900 dark:text-neutral-100 flex">
-            {/* Main Content */}
-            <div className={cn("flex-1 transition-all duration-300", isSidebarOpen ? "md:mr-80" : "mr-0")}>
-                <SuggestionDrawer
-                    isOpen={!!activeSuggestion.introId}
-                    introId={activeSuggestion.introId}
-                    type={activeSuggestion.type}
-                    currentText={activeSuggestion.text}
-                    onClose={() => setActiveSuggestion({ introId: null, type: null, text: "" })}
-                />
-
-                <header className="w-full px-4 md:px-8 py-3 md:py-4 flex items-center justify-between sticky top-0 bg-white/80 dark:bg-black/80 backdrop-blur-md z-10 border-b border-transparent">
-                    <Link
-                        href="/"
-                        className="text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors shrink-0"
-                    >
-                        <ArrowLeft size={20} />
+        <div className="cw-shell">
+            {/* ── Header ── */}
+            <header className="cw-header">
+                <div className="cw-header-row">
+                    {/* Left: back */}
+                    <Link href="/" className="cw-back" aria-label="Back to library">
+                        <ArrowIcon />
+                        <span>Library</span>
                     </Link>
 
-                    <div className="flex items-center gap-1 md:gap-3 flex-wrap justify-end">
-                        {/* Status Select */}
-                        <div className="relative group">
-                            <select
-                                value={data.status}
-                                onChange={(e) => {
-                                    const newStatus = e.target.value as any;
-                                    setData({ ...data, status: newStatus });
-                                    startTransition(async () => {
-                                        await updateScriptStatus(data.id, newStatus);
-                                        toast.success("Status updated");
-                                    });
-                                }}
-                                className="appearance-none bg-neutral-100 dark:bg-neutral-900 border border-transparent hover:border-neutral-200 dark:hover:border-neutral-800 text-neutral-600 dark:text-neutral-400 text-xs font-medium px-3 py-1.5 rounded-md cursor-pointer focus:outline-none pr-8 transition-all capitalize"
-                            >
-                                <option value="draft">Draft</option>
-                                <option value="filmed">Filmed</option>
-                                <option value="done">Done</option>
-                                <option value="archived">Archived</option>
-                            </select>
-                            <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
-                        </div>
-
-                        <div className="w-px h-6 bg-neutral-200 dark:bg-neutral-800 mx-1" />
-
-                        <button
-                            onClick={() => {
-                                if (window.confirm("Are you sure you want to delete this script?")) {
-                                    startTransition(async () => {
-                                        await deleteScript(data.id);
-                                    });
-                                }
-                            }}
-                            disabled={isPending}
-                            className="text-neutral-500 hover:text-red-500 transition-colors p-2 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-900"
-                            title="Delete Script"
-                        >
-                            <Trash2 size={20} />
-                        </button>
-                        <div className="w-px h-6 bg-neutral-200 dark:bg-neutral-800 mx-1" />
-
-                        <button
-                            onClick={handleCopy}
-                            className="text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors p-2 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-900"
-                            title="Copy Script"
-                        >
-                            <Copy size={20} />
-                        </button>
-
-                        <div className="w-px h-6 bg-neutral-200 dark:bg-neutral-800 mx-1 hidden sm:block" />
-                        <button
-                            onClick={handleSave}
-                            disabled={isPending}
-                            className="flex items-center gap-1.5 md:gap-2 bg-neutral-900 text-neutral-50 dark:bg-neutral-100 dark:text-neutral-900 px-3 md:px-4 py-1.5 md:py-2 rounded-full text-xs md:text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-all font-sans shrink-0"
-                        >
-                            {isPending ? "Saving..." : (
-                                <>
-                                    <Save size={14} />
-                                    <span>Save</span>
-                                </>
-                            )}
-                        </button>
-
-                        <div className="w-px h-6 bg-neutral-200 dark:bg-neutral-800 mx-1 hidden sm:block" />
-
-                        {/* Sidebar Toggle */}
-                        <button
-                            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                            className={cn("text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors p-1.5 md:p-2 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-900 shrink-0", isSidebarOpen && "bg-neutral-100 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100")}
-                            title="Toggle Sidebar"
-                        >
-                            <PanelRightOpen size={20} />
-                        </button>
+                    {/* Center: meta */}
+                    <div className="cw-header-meta">
+                        <span className="cw-meta-pair">
+                            <span className="cw-meta-k">Words</span>
+                            <span className="cw-meta-v">{wordCount.toLocaleString()}</span>
+                        </span>
+                        <span className="cw-meta-dot" />
+                        <span className="cw-meta-pair">
+                            <span className="cw-meta-k">Cues</span>
+                            <span className="cw-meta-v">{onScreenCount}</span>
+                        </span>
                     </div>
-                </header>
 
-                <main className="w-full max-w-4xl mx-auto px-4 md:px-12 py-6 md:py-12 pb-32 overflow-x-hidden">
-                    <div className="space-y-8 md:space-y-12">
-                        {/* Title */}
-                        <TextareaAutosize
-                            placeholder="Untitled Script"
-                            value={data.title}
-                            onChange={(e) => setData({ ...data, title: e.target.value })}
-                            className="w-full text-3xl md:text-5xl font-bold bg-transparent border-none placeholder:text-neutral-300 dark:placeholder:text-neutral-700 outline-none resize-none break-words whitespace-pre-wrap"
+                    {/* Right: actions */}
+                    <div className="cw-header-actions">
+                        <AssetsTrigger
+                            onClick={() => setAssetsOpen(true)}
+                            count={data.scriptImages?.length ?? 0}
                         />
 
-                        {/* Intros Section */}
-                        <section className="space-y-6">
-                            <div className="flex items-center justify-between text-xs font-semibold text-neutral-400 uppercase tracking-wider">
-                                <h2>Intros / Hooks</h2>
-                                <button onClick={addIntro} className="hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors p-1">
-                                    <Plus size={14} />
-                                </button>
-                            </div>
-                            <div className="space-y-8">
-                                {data.intros.map((intro, index) => (
-                                    <div key={intro.id} className="group relative pl-3 md:pl-4 border-l-2 border-neutral-200 dark:border-neutral-800 transition-colors hover:border-neutral-300 dark:hover:border-neutral-600">
-                                        <div className="absolute top-0 right-8 md:right-auto md:left-auto md:-ml-12 md:top-0 md:-left-8 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                                            <button onClick={() => removeIntro(intro.id)} className="text-neutral-400 hover:text-red-500 p-2 bg-white/50 dark:bg-black/50 md:bg-transparent rounded-full backdrop-blur-sm md:backdrop-blur-none">
-                                                <Trash2 size={16} />
-                                            </button>
-                                        </div>
-                                        <div className="space-y-4">
-                                            <div className="relative group/input">
-                                                <TextareaAutosize
-                                                    placeholder="Title Hook (Text on screen)..."
-                                                    value={intro.titleHook}
-                                                    onChange={(e) => updateIntro(intro.id, "titleHook", e.target.value)}
-                                                    className="w-full bg-transparent text-xl md:text-2xl font-semibold outline-none resize-none placeholder:text-neutral-300 dark:placeholder:text-neutral-700 pr-20 md:pr-10 break-words whitespace-pre-wrap"
-                                                />
-                                                <button
-                                                    onClick={() => openSuggestion(intro, "hook")}
-                                                    className="absolute right-0 top-1 text-neutral-300 hover:text-amber-400 opacity-100 md:opacity-0 group-hover/input:opacity-100 transition-all p-1"
-                                                    title="AI Suggestions"
-                                                >
-                                                    <Sparkles size={16} />
-                                                </button>
-                                            </div>
-                                            <div className="relative group/input">
-                                                <TextareaAutosize
-                                                    placeholder="Verbal Intro (What you say)..."
-                                                    value={intro.verbalIntro}
-                                                    onChange={(e) => updateIntro(intro.id, "verbalIntro", e.target.value)}
-                                                    className="w-full bg-transparent text-base md:text-lg text-neutral-600 dark:text-neutral-300 outline-none resize-none placeholder:text-neutral-300 dark:placeholder:text-neutral-700 font-normal leading-relaxed pr-10 break-words whitespace-pre-wrap"
-                                                />
-                                                <button
-                                                    onClick={() => openSuggestion(intro, "intro")}
-                                                    className="absolute right-0 top-1 text-neutral-300 hover:text-amber-400 opacity-100 md:opacity-0 group-hover/input:opacity-100 transition-all p-1"
-                                                    title="AI Suggestions"
-                                                >
-                                                    <Sparkles size={16} />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                                {data.intros.length === 0 && (
-                                    <div className="text-center py-8 border border-dashed border-neutral-200 dark:border-neutral-800 rounded-xl text-neutral-400 text-sm">
-                                        No intros yet. <button onClick={addIntro} className="underline hover:text-neutral-500">Add one</button>
-                                    </div>
-                                )}
-                            </div>
-                        </section>
+                        <button
+                            className="cw-iconbtn"
+                            onClick={() => setContextOpen((o) => !o)}
+                            title="Toggle context"
+                            style={{ opacity: contextOpen ? 1 : 0.5 }}
+                        >
+                            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/>
+                            </svg>
+                        </button>
 
-                        <hr className="border-neutral-100 dark:border-neutral-900" />
+                        <span className="cw-vrule" />
 
-                        {/* Body */}
-                        <section>
-                            <div className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-4">Body Content</div>
-                            <TextareaAutosize
-                                placeholder="Write your script body here..."
-                                value={data.body}
-                                onChange={(e) => setData({ ...data, body: e.target.value })}
-                                className="w-full text-base md:text-lg leading-relaxed bg-transparent border-none placeholder:text-neutral-300 dark:placeholder:text-neutral-700 outline-none resize-none font-serif-video break-words whitespace-pre-wrap"
-                                minRows={10}
-                            />
-                        </section>
-                    </div>
-                </main>
-            </div>
-
-            {/* Right Sidebar */}
-            <RightSidebar
-                isOpen={isSidebarOpen}
-                onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
-                activeTab={sidebarTab}
-                onTabChange={setSidebarTab}
-                showFeedbackTab={data.status !== "archived"}
-                pendingFeedbackCount={(data.feedback || []).filter(f => !f.addressedAt).length}
-            >
-                {sidebarTab === "feedback" && data.status !== "archived" ? (
-                    <FeedbackPanel
-                        scriptId={data.id}
-                        editStatus={data.editStatus}
-                        editClaimedAt={data.editClaimedAt}
-                        feedback={data.feedback || []}
-                    />
-                ) : sidebarTab === "context" ? (
-                    <div className="space-y-4 animate-in fade-in duration-300">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-sm font-semibold text-neutral-500 uppercase tracking-wider">Script Context</h3>
+                        {/* Status dropdown */}
+                        <div className="cw-status-wrap">
                             <button
-                                onClick={addContextItem}
-                                className="text-xs text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 flex items-center gap-1 transition-colors"
+                                className="cw-status"
+                                onClick={() => setStatusOpen((o) => !o)}
+                                onBlur={() => setTimeout(() => setStatusOpen(false), 120)}
                             >
-                                <Plus size={12} /> Add
+                                <span className="cw-status-dot" style={{ background: STATUS_COLORS[data.status] ?? "var(--ink-3)" }} />
+                                <span style={{ textTransform: "capitalize" }}>{data.status}</span>
+                                <ChevIcon />
+                            </button>
+                            {statusOpen && (
+                                <div className="cw-status-menu">
+                                    {statuses.map((s) => (
+                                        <button
+                                            key={s}
+                                            className="cw-status-item"
+                                            onMouseDown={() => handleStatus(s)}
+                                        >
+                                            <span className="cw-status-dot" style={{ background: STATUS_COLORS[s] }} />
+                                            <span style={{ textTransform: "capitalize" }}>{s}</span>
+                                            {s === data.status && <span className="cw-status-check"><CheckIcon /></span>}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <span className="cw-vrule" />
+
+                        <button className="cw-iconbtn" title="Copy script" onClick={handleCopy}>
+                            <CopyIcon />
+                        </button>
+
+                        <button
+                            className="cw-save"
+                            onClick={handleSave}
+                            disabled={isPending}
+                        >
+                            <span>{isPending ? "Saving…" : "Save draft"}</span>
+                            <kbd className="cw-kbd">⌘S</kbd>
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            {/* ── Stage ── */}
+            <div className="cw-stage">
+                <main className="cw-doc">
+                    {/* Title block */}
+                    <section className="cw-titleblock">
+                        <div className="cw-titleblock-meta">
+                            <span className="cw-eyebrow">Script</span>
+                            <span className="cw-eyebrow-dot" />
+                            <span className="cw-eyebrow" style={{ textTransform: "capitalize" }}>{data.status}</span>
+                        </div>
+                        <TextareaAutosize
+                            className="cw-title"
+                            value={data.title}
+                            onChange={(e) => setData({ ...data, title: e.target.value })}
+                            placeholder="Untitled script"
+                        />
+                        <div className="cw-titleblock-rule">
+                            <span className="cw-titleblock-byline">Reel Scripter</span>
+                        </div>
+                    </section>
+
+                    {/* Intros section */}
+                    <section className="cw-section">
+                        <div className="cw-section-head">
+                            <h2 className="cw-section-title">
+                                <span className="cw-section-numeral">I.</span>
+                                Intros &amp; Hooks
+                            </h2>
+                            <span className="cw-section-rule" />
+                            <span className="cw-section-count">{data.intros.length} take{data.intros.length === 1 ? "" : "s"}</span>
+                            <button className="cw-section-add" onClick={addIntro}>
+                                <PlusIcon /><span>New take</span>
                             </button>
                         </div>
 
-                        <div className="space-y-3">
-                            {(data.contextItems || []).map((item) => (
-                                <div key={item.id} className="group relative">
-                                    <TextareaAutosize
-                                        placeholder="Add context..."
-                                        value={item.content}
-                                        onChange={(e) => updateContextItem(item.id, e.target.value)}
-                                        className="w-full bg-neutral-100 dark:bg-neutral-900 rounded-lg p-3 text-sm text-neutral-700 dark:text-neutral-300 outline-none resize-none placeholder:text-neutral-400 border border-transparent focus:border-neutral-200 dark:focus:border-neutral-800 transition-all"
-                                        minRows={2}
-                                    />
-                                    <button
-                                        onClick={() => removeContextItem(item.id)}
-                                        className="absolute top-2 right-2 text-neutral-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all p-1 bg-white/50 dark:bg-black/50 rounded-md backdrop-blur-sm"
-                                    >
-                                        <Trash2 size={12} />
-                                    </button>
-                                </div>
+                        <div className="cw-intros">
+                            {data.intros.map((intro, index) => (
+                                <article key={intro.id} className="cw-intro">
+                                    <div className="cw-intro-gutter">
+                                        <span className="cw-take-num">Take {String(index + 1).padStart(2, "0")}</span>
+                                        <span className="cw-take-line" />
+                                        <button
+                                            className="cw-take-action"
+                                            onClick={() => removeIntro(intro.id)}
+                                            title="Remove take"
+                                        >
+                                            <TrashIcon />
+                                        </button>
+                                    </div>
+                                    <div className="cw-intro-body">
+                                        <div className="cw-intro-row">
+                                            <span className="cw-intro-label">Hook</span>
+                                            <TextareaAutosize
+                                                className="cw-intro-hook"
+                                                value={intro.titleHook}
+                                                onChange={(e) => updateIntro(intro.id, "titleHook", e.target.value)}
+                                                placeholder="A line that stops the scroll…"
+                                            />
+                                            <button
+                                                className="cw-intro-ai"
+                                                onClick={() => openSuggestion(intro, "hook")}
+                                                title="Suggest variations"
+                                            >
+                                                <SparkIcon /><span>Suggest</span>
+                                            </button>
+                                        </div>
+                                        <div className="cw-intro-row">
+                                            <span className="cw-intro-label">Spoken</span>
+                                            <TextareaAutosize
+                                                className="cw-intro-verbal"
+                                                value={intro.verbalIntro}
+                                                onChange={(e) => updateIntro(intro.id, "verbalIntro", e.target.value)}
+                                                placeholder="What you actually say to camera…"
+                                            />
+                                        </div>
+                                    </div>
+                                </article>
                             ))}
-                            {(data.contextItems || []).length === 0 && (
-                                <p className="text-xs text-neutral-400 text-center py-4">
-                                    Add context to improve AI suggestions.
-                                </p>
+                            {data.intros.length === 0 && (
+                                <div className="cw-empty">
+                                    No takes yet.{" "}
+                                    <button className="cw-link" onClick={addIntro}>Write the first one</button>.
+                                </div>
                             )}
                         </div>
-                    </div>
-                ) : (
-                    <div className="animate-in fade-in duration-300">
-                        <ImageGenerator scriptId={data.id} />
-                        <ImageGallery images={data.scriptImages || []} />
-                    </div>
-                )}
-            </RightSidebar>
+                    </section>
+
+                    {/* Body section */}
+                    <section className="cw-section">
+                        <div className="cw-section-head">
+                            <h2 className="cw-section-title">
+                                <span className="cw-section-numeral">II.</span>
+                                Script
+                            </h2>
+                            <span className="cw-section-rule" />
+                            <span className="cw-section-count">{onScreenCount} on-screen cue{onScreenCount === 1 ? "" : "s"}</span>
+                            <button
+                                className={"cw-section-add" + (bodyEditing ? " is-active" : "")}
+                                onClick={() => setBodyEditing((e) => !e)}
+                            >
+                                <PenIcon /><span>{bodyEditing ? "Preview" : "Edit"}</span>
+                            </button>
+                        </div>
+
+                        {bodyEditing ? (
+                            <div className="cw-body-edit">
+                                <TextareaAutosize
+                                    className="cw-body-textarea"
+                                    value={data.body}
+                                    onChange={(e) => setData({ ...data, body: e.target.value })}
+                                    onBlur={() => setBodyEditing(false)}
+                                    placeholder="Begin the script…"
+                                    minRows={14}
+                                />
+                                <p className="cw-edit-hint">
+                                    Wrap lines like{" "}
+                                    <span className="cw-pill cw-pill-mono">[On-screen text: your line]</span>{" "}
+                                    to add lower-thirds. They appear in the margin in preview.
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="cw-body" onClick={() => setBodyEditing(true)}>
+                                {bodyBlocks.flatMap((block, bi) => {
+                                    if (block.kind === "directive") {
+                                        return [(
+                                            <div key={`${bi}-d`} className="cw-block cw-block-directive">
+                                                <OnscreenPill text={block.text} />
+                                            </div>
+                                        )];
+                                    }
+                                    // Split para tokens at directive boundaries so each pill gets its own row
+                                    const rows: JSX.Element[] = [];
+                                    let textBuf = "";
+                                    let rowIdx = 0;
+                                    for (const token of block.tokens) {
+                                        if (token.type === "directive") {
+                                            if (textBuf.trim()) {
+                                                rows.push(<p key={`${bi}-t${rowIdx++}`} className="cw-block cw-block-para">{textBuf}</p>);
+                                                textBuf = "";
+                                            }
+                                            rows.push(
+                                                <div key={`${bi}-d${rowIdx++}`} className="cw-block cw-block-directive">
+                                                    <OnscreenPill text={token.text} />
+                                                </div>
+                                            );
+                                        } else {
+                                            textBuf += token.text;
+                                        }
+                                    }
+                                    if (textBuf.trim()) {
+                                        rows.push(<p key={`${bi}-t${rowIdx++}`} className="cw-block cw-block-para">{textBuf}</p>);
+                                    }
+                                    return rows;
+                                })}
+                            </div>
+                        )}
+                    </section>
+
+                    {/* Doc footer */}
+                    <footer className="cw-doc-foot">
+                        <span className="cw-foot-rule" />
+                        <span className="cw-foot-mark">— end —</span>
+                        <span className="cw-foot-rule" />
+                    </footer>
+                </main>
+
+                {/* Context rail */}
+                {contextOpen && <ContextRail contextItems={data.contextItems || []} />}
+            </div>
+
+            {/* Feedback dock */}
+            {feedbackOpen ? (
+                <FeedbackDock
+                    scriptId={data.id}
+                    feedback={data.feedback || []}
+                    onClose={() => setFeedbackOpen(false)}
+                />
+            ) : (
+                <FeedbackTrigger
+                    onClick={() => setFeedbackOpen(true)}
+                    openCount={openFeedbackCount}
+                />
+            )}
+
+            {/* Assets overlay */}
+            {assetsOpen && (
+                <AssetsOverlay
+                    scriptId={data.id}
+                    images={data.scriptImages || []}
+                    onClose={() => setAssetsOpen(false)}
+                />
+            )}
+
+            {/* Suggestion drawer */}
+            <SuggestionDrawer
+                isOpen={!!activeSuggestion.introId}
+                introId={activeSuggestion.introId}
+                type={activeSuggestion.type}
+                currentText={activeSuggestion.text}
+                onClose={() => setActiveSuggestion({ introId: null, type: null, text: "" })}
+            />
         </div>
     );
 }
