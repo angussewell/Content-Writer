@@ -74,12 +74,24 @@ type BodyBlock =
     | { kind: "para"; tokens: Token[]; key: number };
 
 function parseBody(body: string): BodyBlock[] {
-    const paragraphs = body.split(/\n{2,}/).map((s) => s.trimEnd()).filter(Boolean);
-    return paragraphs.map((p, idx) => {
-        const m = p.match(BLOCK_DIRECTIVE_RE);
-        if (m) return { kind: "directive" as const, text: m[1].trim(), key: idx };
-        return { kind: "para" as const, tokens: tokenizeParagraph(p), key: idx };
-    });
+    const blocks: BodyBlock[] = [];
+    const directiveRe = /\[On-screen(?:\s+text)?:\s*([\s\S]+?)\]/gi;
+    let last = 0, key = 0, m;
+    while ((m = directiveRe.exec(body)) !== null) {
+        const before = body.slice(last, m.index);
+        if (before.trim()) {
+            for (const p of before.split(/\n{2,}/).map((s) => s.trimEnd()).filter(Boolean))
+                blocks.push({ kind: "para", tokens: tokenizeParagraph(p), key: key++ });
+        }
+        blocks.push({ kind: "directive", text: m[1].trim(), key: key++ });
+        last = m.index + m[0].length;
+    }
+    const after = body.slice(last);
+    if (after.trim()) {
+        for (const p of after.split(/\n{2,}/).map((s) => s.trimEnd()).filter(Boolean))
+            blocks.push({ kind: "para", tokens: tokenizeParagraph(p), key: key++ });
+    }
+    return blocks;
 }
 
 function OnscreenPill({ text }: { text: string }) {
