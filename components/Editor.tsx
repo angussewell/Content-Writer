@@ -50,15 +50,15 @@ interface ScriptData {
 /* ── Body parsing ── */
 
 // Matches a full paragraph that is entirely a directive
-const BLOCK_DIRECTIVE_RE = /^\s*\[On-screen(?:\s+text)?:\s*(.+?)\]\s*$/i;
+const BLOCK_DIRECTIVE_RE = /^\s*\[On-screen(?:\s+text)?:\s*(.+?)\]\s*$/is;
 // Matches inline directives within a paragraph
-const INLINE_DIRECTIVE_RE = /\[On-screen(?:\s+text)?:\s*(.+?)\]/gi;
+const INLINE_DIRECTIVE_RE = /\[On-screen(?:\s+text)?:\s*(.+?)\]/gis;
 
 type Token = { type: "text"; text: string } | { type: "directive"; text: string };
 
 function tokenizeParagraph(text: string): Token[] {
     const tokens: Token[] = [];
-    const re = /\[On-screen(?:\s+text)?:\s*(.+?)\]/gi;
+    const re = /\[On-screen(?:\s+text)?:\s*(.+?)\]/gis;
     let last = 0, m;
     while ((m = re.exec(text)) !== null) {
         if (m.index > last) tokens.push({ type: "text", text: text.slice(last, m.index) });
