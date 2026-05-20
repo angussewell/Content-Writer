@@ -309,3 +309,23 @@ export async function deleteFeedback(feedbackId: string, scriptId: string) {
     revalidatePath(`/${scriptId}`);
     return { success: true };
 }
+
+export async function archiveVideoIdea(id: string) {
+    await db.execute(sql`
+        UPDATE video_ideas
+        SET ideation_status = 'archived', updated_at = now()
+        WHERE id = ${id}::uuid
+    `);
+    revalidatePath("/ideas");
+    return { success: true };
+}
+
+export async function restoreVideoIdea(id: string) {
+    await db.execute(sql`
+        UPDATE video_ideas
+        SET ideation_status = 'pending', updated_at = now()
+        WHERE id = ${id}::uuid
+    `);
+    revalidatePath("/ideas");
+    return { success: true };
+}

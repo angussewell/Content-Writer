@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, integer, json, jsonb, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, json, jsonb, index, boolean, bigint, date } from "drizzle-orm/pg-core";
 
 export const scripts = pgTable("scripts", {
     id: uuid("id").defaultRandom().primaryKey(),
@@ -64,6 +64,39 @@ export const scriptFeedback = pgTable("script_feedback", {
 }, (t) => [
     index("script_feedback_script_id_round_idx").on(t.scriptId, t.roundNumber),
 ]);
+
+export const videoIdeas = pgTable("video_ideas", {
+    id: uuid("id").defaultRandom().primaryKey(),
+    transcript: text("transcript").notNull(),
+    recorded: boolean("recorded").default(false).notNull(),
+    telegramMessageId: bigint("telegram_message_id", { mode: "bigint" }),
+    sourceChatId: bigint("source_chat_id", { mode: "bigint" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+    ideationStatus: text("ideation_status").default("pending"),
+    ideationClaimedAt: timestamp("ideation_claimed_at", { withTimezone: true }),
+    ideationClaimedBy: text("ideation_claimed_by"),
+    scriptId: uuid("script_id").references(() => scripts.id),
+}, (t) => [
+    index("idx_video_ideas_created_at").on(t.createdAt.desc()),
+    index("idx_video_ideas_recorded").on(t.recorded),
+]);
+
+export const youtubeIdeas = pgTable("youtube_ideas", {
+    id: uuid("id").defaultRandom().primaryKey(),
+    title: text("title").notNull(),
+    description: text("description"),
+    status: text("status").default("idea").notNull(),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+    format: text("format"),
+    hypothesis: text("hypothesis"),
+    result: text("result"),
+    verdict: text("verdict"),
+    lesson: text("lesson"),
+    filmedAt: date("filmed_at"),
+});
 
 export const scriptRevisions = pgTable("script_revisions", {
     id: uuid("id").defaultRandom().primaryKey(),
