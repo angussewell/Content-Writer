@@ -49,20 +49,29 @@ interface ScriptData {
 
 /* ── Body parsing ── */
 
-// Matches a full paragraph that is entirely a directive
-const BLOCK_DIRECTIVE_RE = /^\s*\[On-screen(?:\s+text)?:\s*([\s\S]+?)\]\s*$/i;
-// Matches inline directives within a paragraph
-const INLINE_DIRECTIVE_RE = /\[On-screen(?:\s+text)?:\s*([\s\S]+?)\]/gi;
+// Any content wrapped in square brackets is treated as an on-screen/graphic cue.
+// Format: [LABEL: content] or [content] — the label before the colon is displayed
+// as the pill key (e.g. "ON SCREEN", "SCREEN RECORDING", "B-ROLL").
+const DIRECTIVE_RE = /\[([^\]]+)\]/g;
 
-type Token = { type: "text"; text: string } | { type: "directive"; text: string };
+function parseDirective(raw: string): { label: string; content: string } {
+    const colonIdx = raw.indexOf(":");
+    if (colonIdx > 0) {
+        return { label: raw.slice(0, colonIdx).trim(), content: raw.slice(colonIdx + 1).trim() };
+    }
+    return { label: "On-screen", content: raw.trim() };
+}
+
+type Token = { type: "text"; text: string } | { type: "directive"; label: string; text: string };
 
 function tokenizeParagraph(text: string): Token[] {
     const tokens: Token[] = [];
-    const re = /\[On-screen(?:\s+text)?:\s*([\s\S]+?)\]/gi;
+    const re = new RegExp(DIRECTIVE_RE.source, "g");
     let last = 0, m;
     while ((m = re.exec(text)) !== null) {
         if (m.index > last) tokens.push({ type: "text", text: text.slice(last, m.index) });
-        tokens.push({ type: "directive", text: m[1].trim() });
+        const { label, content } = parseDirective(m[1]);
+        tokens.push({ type: "directive", label, text: content });
         last = m.index + m[0].length;
     }
     if (last < text.length) tokens.push({ type: "text", text: text.slice(last) });
@@ -70,12 +79,12 @@ function tokenizeParagraph(text: string): Token[] {
 }
 
 type BodyBlock =
-    | { kind: "directive"; text: string; key: number }
+    | { kind: "directive"; label: string; text: string; key: number }
     | { kind: "para"; tokens: Token[]; key: number };
 
 function parseBody(body: string): BodyBlock[] {
     const blocks: BodyBlock[] = [];
-    const directiveRe = /\[On-screen(?:\s+text)?:\s*([\s\S]+?)\]/gi;
+    const directiveRe = new RegExp(DIRECTIVE_RE.source, "g");
     let last = 0, key = 0, m;
     while ((m = directiveRe.exec(body)) !== null) {
         const before = body.slice(last, m.index);
@@ -83,7 +92,8 @@ function parseBody(body: string): BodyBlock[] {
             for (const p of before.split(/\n{2,}/).map((s) => s.trimEnd()).filter(Boolean))
                 blocks.push({ kind: "para", tokens: tokenizeParagraph(p), key: key++ });
         }
-        blocks.push({ kind: "directive", text: m[1].trim(), key: key++ });
+        const { label, content } = parseDirective(m[1]);
+        blocks.push({ kind: "directive", label, text: content, key: key++ });
         last = m.index + m[0].length;
     }
     const after = body.slice(last);
@@ -94,13 +104,13 @@ function parseBody(body: string): BodyBlock[] {
     return blocks;
 }
 
-function OnscreenPill({ text }: { text: string }) {
+function OnscreenPill({ label, text }: { label: string; text: string }) {
     const words = text.split(/\s+/);
     const preview = words.slice(0, 6).join(" ");
     const truncated = words.length > 6;
     return (
         <span className="cw-onscreen-pill" data-full={text}>
-            <span className="cw-onscreen-pill__key">On-screen</span>
+            <span className="cw-onscreen-pill__key">{label}</span>
             <span className="cw-onscreen-pill__text">{preview}{truncated ? "…" : ""}</span>
         </span>
     );
@@ -174,7 +184,7 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
 
     const wordCount = useMemo(() => {
         const text = [data.title, ...data.intros.map((i) => i.titleHook + " " + i.verbalIntro), data.body].join(" ");
-        return text.replace(/\[On-screen text:[^\]]*\]/gi, "").split(/\s+/).filter(Boolean).length;
+        return text.replace(/\[[^\]]*\]/g, "").split(/\s+/).filter(Boolean).length;
     }, [data]);
 
     const bodyBlocks = useMemo(() => parseBody(data.body), [data.body]);
@@ -462,9 +472,10 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                                     minRows={14}
                                 />
                                 <p className="cw-edit-hint">
-                                    Wrap lines like{" "}
-                                    <span className="cw-pill cw-pill-mono">[On-screen text: your line]</span>{" "}
-                                    to add lower-thirds. They appear in the margin in preview.
+                                    Anything in brackets becomes a graphic cue — e.g.{" "}
+                                    <span className="cw-pill cw-pill-mono">[ON SCREEN: your line]</span>{" "}
+                                    or <span className="cw-pill cw-pill-mono">[SCREEN RECORDING: description]</span>.
+                                    They appear in the margin in preview.
                                 </p>
                             </div>
                         ) : (
@@ -473,7 +484,7 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                                     if (block.kind === "directive") {
                                         return [(
                                             <div key={`${bi}-d`} className="cw-block cw-block-directive">
-                                                <OnscreenPill text={block.text} />
+                                                <OnscreenPill label={block.label} text={block.text} />
                                             </div>
                                         )];
                                     }
@@ -489,7 +500,7 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                                             }
                                             rows.push(
                                                 <div key={`${bi}-d${rowIdx++}`} className="cw-block cw-block-directive">
-                                                    <OnscreenPill text={token.text} />
+                                                    <OnscreenPill label={token.label} text={token.text} />
                                                 </div>
                                             );
                                         } else {
