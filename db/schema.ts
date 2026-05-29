@@ -98,6 +98,20 @@ export const youtubeIdeas = pgTable("youtube_ideas", {
     filmedAt: date("filmed_at"),
 });
 
+export const buzzStories = pgTable("buzz_stories", {
+    id: bigint("id", { mode: "number" }).primaryKey(),
+    storyDate: date("story_date"),
+    summary: text("summary"),
+    reactAngle: text("react_angle"),
+    interestScore: integer("interest_score"),
+    memberPostIds: text("member_post_ids").array(),
+    buzzCount: integer("buzz_count"),
+    platforms: text("platforms").array(),
+    topUrl: text("top_url"),
+    surfaced: boolean("surfaced").default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
 export const scriptRevisions = pgTable("script_revisions", {
     id: uuid("id").defaultRandom().primaryKey(),
     scriptId: uuid("script_id")

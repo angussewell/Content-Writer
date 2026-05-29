@@ -329,3 +329,19 @@ export async function restoreVideoIdea(id: string) {
     revalidatePath("/ideas");
     return { success: true };
 }
+
+export async function spikeBuzzStory(id: number) {
+    await db.execute(sql`
+        UPDATE buzz_stories SET surfaced = true WHERE id = ${id}
+    `);
+    revalidatePath("/wire");
+    return { success: true };
+}
+
+export async function restoreBuzzStory(id: number) {
+    await db.execute(sql`
+        UPDATE buzz_stories SET surfaced = false WHERE id = ${id}
+    `);
+    revalidatePath("/wire");
+    return { success: true };
+}
