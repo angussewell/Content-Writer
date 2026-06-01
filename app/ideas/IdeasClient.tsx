@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition, useRef, useEffect } from "react";
-import { archiveVideoIdea, restoreVideoIdea } from "@/app/actions";
+import { useRouter } from "next/navigation";
+import { archiveVideoIdea, restoreVideoIdea, archiveYoutubeIdea, restoreYoutubeIdea } from "@/app/actions";
 
 type VideoIdea = {
   id: string;
@@ -24,6 +25,8 @@ type YoutubeIdea = {
   verdict: string | null;
   lesson: string | null;
   filmed_at: string | null;
+  archived_at: string | null;
+  created_at: string;
 };
 
 function shortId(id: string) {
@@ -56,6 +59,43 @@ const STATUS_LABEL: Record<string, string> = {
   archived: "Archived",
 };
 
+// ----- YouTube helpers -----
+
+function ytStage(idea: YoutubeIdea): "idea" | "prepped" | "filmed" | "posted" | "archived" {
+  if (idea.archived_at) return "archived";
+  if (idea.status === "prepped") return "prepped";
+  if (idea.status === "filmed") return "filmed";
+  if (idea.status === "posted") return "posted";
+  return "idea";
+}
+
+const YT_STAGE_LABEL: Record<string, string> = {
+  idea: "Idea",
+  prepped: "Prepped",
+  filmed: "Filmed",
+  posted: "Posted",
+  archived: "Archived",
+};
+
+export function reactionPrompt(idea: { id: string; title: string }) {
+  return `Use the youtube-reaction-prep skill on the YouTube concept "${idea.title}" — youtube_ideas id ${idea.id}`;
+}
+
+function shortFormat(format: string | null): string | null {
+  if (!format) return null;
+  // The first clause before a dash/period is the format archetype.
+  const clause = format.split(/[—–\-.:]/)[0].trim();
+  const out = clause.length > 0 ? clause : format.trim();
+  return out.length > 46 ? out.slice(0, 44).trimEnd() + "…" : out;
+}
+
+function firstSourceDomain(idea: YoutubeIdea): string | null {
+  const hay = `${idea.notes ?? ""} ${idea.description ?? ""}`;
+  const m = hay.match(/https?:\/\/([^/\s)]+)/i);
+  if (!m) return null;
+  return m[1].replace(/^www\./, "");
+}
+
 export function IdeasClient({
   dataset,
   videoIdeas,
@@ -65,6 +105,7 @@ export function IdeasClient({
   videoIdeas: VideoIdea[];
   youtubeIdeas: YoutubeIdea[];
 }) {
+  const router = useRouter();
   const [toast, setToast] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -82,8 +123,7 @@ export function IdeasClient({
     toastTimer.current = setTimeout(() => setToast(null), 1800);
   }
 
-  async function copyPrompt(id: string) {
-    const text = `Run the idea-to-script skill on idea #${id}`;
+  async function copyText(id: string, text: string, toastMsg: string) {
     try {
       await navigator.clipboard.writeText(text);
     } catch {
@@ -92,7 +132,15 @@ export function IdeasClient({
     setCopiedId(id);
     if (copiedTimer.current) clearTimeout(copiedTimer.current);
     copiedTimer.current = setTimeout(() => setCopiedId(null), 1600);
-    showToast("Prompt copied — paste into Claude Code");
+    showToast(toastMsg);
+  }
+
+  function copyVideoPrompt(id: string) {
+    copyText(id, `Run the idea-to-script skill on idea #${id}`, "Prompt copied — paste into Claude Code");
+  }
+
+  function copyReactionPrompt(idea: YoutubeIdea) {
+    copyText(idea.id, reactionPrompt(idea), "Reaction-prep prompt copied");
   }
 
   function onArchive(id: string) {
@@ -109,90 +157,86 @@ export function IdeasClient({
     });
   }
 
+  function onArchiveYt(id: string) {
+    startTransition(async () => {
+      await archiveYoutubeIdea(id);
+      showToast("Concept archived");
+    });
+  }
+
+  function onRestoreYt(id: string) {
+    startTransition(async () => {
+      await restoreYoutubeIdea(id);
+      showToast("Concept restored");
+    });
+  }
+
   if (dataset === "youtube") {
     return (
       <>
         {youtubeIdeas.length === 0 ? (
           <div className="empty">
             <div className="empty__mark">❦</div>
-            <p className="empty__txt">No YouTube concepts yet.</p>
+            <p className="empty__txt">No concepts under this filter.</p>
           </div>
         ) : (
-          <section className="yt-grid">
+          <section className="yt-list">
             {youtubeIdeas.map((idea) => {
+              const stage = ytStage(idea);
               const isCopied = copiedId === idea.id;
+              const fmt = shortFormat(idea.format);
+              const domain = firstSourceDomain(idea);
+              const date = formatDate(idea.created_at);
+              const sub = idea.description || idea.hypothesis || "";
+              const open = () => router.push(`/ideas/youtube/${idea.id}`);
               return (
                 <article
                   key={idea.id}
-                  className="yt-card"
-                  onClick={() => copyPrompt(idea.id)}
+                  className="yt-row"
+                  data-stage={stage}
+                  onClick={open}
                   role="button"
                   tabIndex={0}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
+                    if (e.key === "Enter") {
                       e.preventDefault();
-                      copyPrompt(idea.id);
+                      open();
                     }
                   }}
                 >
-                  <div className="yt-card__top">
-                    <span className={`status status--${idea.status}`}>
-                      <span className="dot" /> {idea.status}
-                    </span>
-                    {idea.format && (
-                      <>
-                        <span className="sep" />
-                        <span>{idea.format}</span>
-                      </>
-                    )}
-                    {idea.filmed_at && (
-                      <>
-                        <span className="sep" />
-                        <span>filmed {idea.filmed_at}</span>
-                      </>
-                    )}
+                  <span className={`yt-stage yt-stage--${stage}`}>
+                    <span className="yt-stage__dot" /> {YT_STAGE_LABEL[stage]}
+                  </span>
+
+                  <div className="yt-row__main">
+                    <h3 className="yt-row__title">{idea.title}</h3>
+                    {sub && <p className="yt-row__sub">{sub}</p>}
+                    <div className="yt-row__meta">
+                      {fmt && <span className="yt-row__fmt">{fmt}</span>}
+                      {domain && (
+                        <>
+                          <span className="sep" />
+                          <span className="yt-row__src">
+                            <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                              <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.1" />
+                              <path d="M1.5 6 H10.5 M6 1.5 C8 4 8 8 6 10.5 C4 8 4 4 6 1.5" stroke="currentColor" strokeWidth="1.1" />
+                            </svg>
+                            {domain}
+                          </span>
+                        </>
+                      )}
+                      <span className="sep" />
+                      <span className="yt-row__date">{date.label}</span>
+                      <span className="sep" />
+                      <span className="yt-row__id"><span className="hash">#</span>{shortId(idea.id)}</span>
+                    </div>
                   </div>
-                  <h2 className="yt-card__title">{idea.title}</h2>
-                  {idea.description && <p className="yt-card__desc">{idea.description}</p>}
-                  <div className="yt-card__fields">
-                    {idea.hypothesis && (
-                      <div className="yt-field">
-                        <div className="yt-field__k">Hypothesis</div>
-                        <div className="yt-field__v">{idea.hypothesis}</div>
-                      </div>
-                    )}
-                    {idea.result && (
-                      <div className="yt-field">
-                        <div className="yt-field__k">Result</div>
-                        <div className="yt-field__v yt-field__v--mono">{idea.result}</div>
-                      </div>
-                    )}
-                    {idea.verdict && (
-                      <div className="yt-field">
-                        <div className="yt-field__k">Verdict</div>
-                        <div className="yt-field__v">{idea.verdict}</div>
-                      </div>
-                    )}
-                    {idea.lesson && (
-                      <div className="yt-field">
-                        <div className="yt-field__k">Lesson</div>
-                        <div className="yt-field__v">{idea.lesson}</div>
-                      </div>
-                    )}
-                    {idea.notes && (
-                      <div className="yt-field">
-                        <div className="yt-field__k">Notes</div>
-                        <div className="yt-field__v">{idea.notes}</div>
-                      </div>
-                    )}
-                  </div>
-                  <div className="yt-card__foot">
+
+                  <div className="yt-row__actions" onClick={(e) => e.stopPropagation()}>
                     <button
                       className={"action action--primary" + (isCopied ? " action--copied" : "")}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        copyPrompt(idea.id);
-                      }}
+                      onClick={() => copyReactionPrompt(idea)}
+                      title="Copy reaction-prep prompt for Claude Code"
                     >
                       {isCopied ? (
                         <>
@@ -203,13 +247,35 @@ export function IdeasClient({
                         </>
                       ) : (
                         <>
-                          <CopyIcon />
-                          <span>Copy prompt</span>
+                          <PrepIcon />
+                          <span>Prep reaction</span>
                         </>
                       )}
                     </button>
-                    <span className="yt-spacer" />
-                    <span className="yt-card__id">#{idea.id}</span>
+                    {stage === "archived" ? (
+                      <button
+                        className="action action--icon"
+                        onClick={() => onRestoreYt(idea.id)}
+                        title="Restore from archive"
+                        disabled={pending}
+                      >
+                        <RestoreIcon />
+                      </button>
+                    ) : (
+                      <button
+                        className="action action--icon"
+                        onClick={() => onArchiveYt(idea.id)}
+                        title="Archive concept"
+                        disabled={pending}
+                      >
+                        <ArchiveIcon />
+                      </button>
+                    )}
+                    <span className="yt-row__chev" aria-hidden="true">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                        <path d="M5 3 L9 7 L5 11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </span>
                   </div>
                 </article>
               );
@@ -240,13 +306,13 @@ export function IdeasClient({
                 key={idea.id}
                 className="slip"
                 data-status={status}
-                onClick={() => copyPrompt(idea.id)}
+                onClick={() => copyVideoPrompt(idea.id)}
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    copyPrompt(idea.id);
+                    copyVideoPrompt(idea.id);
                   }
                 }}
               >
@@ -284,7 +350,7 @@ export function IdeasClient({
                 <div className="slip__actions" onClick={(e) => e.stopPropagation()}>
                   <button
                     className={"action action--primary" + (isCopied ? " action--copied" : "")}
-                    onClick={() => copyPrompt(idea.id)}
+                    onClick={() => copyVideoPrompt(idea.id)}
                     title="Copy prompt for Claude Code"
                   >
                     {isCopied ? (
@@ -308,11 +374,7 @@ export function IdeasClient({
                       title="Archive idea"
                       disabled={pending}
                     >
-                      <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-                        <rect x="2" y="3" width="10" height="2" rx="0.6" stroke="currentColor" strokeWidth="1.3" />
-                        <path d="M3 5 V11 H11 V5" stroke="currentColor" strokeWidth="1.3" />
-                        <path d="M5.5 7.5 H8.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-                      </svg>
+                      <ArchiveIcon />
                     </button>
                   )}
                   {status === "archived" && (
@@ -322,10 +384,7 @@ export function IdeasClient({
                       title="Restore from archive"
                       disabled={pending}
                     >
-                      <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-                        <path d="M3 7 A4 4 0 1 0 5 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none" />
-                        <path d="M3 2 V4 H5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
+                      <RestoreIcon />
                     </button>
                   )}
                 </div>
@@ -344,6 +403,34 @@ function CopyIcon() {
     <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
       <rect x="3" y="3" width="7" height="7" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
       <path d="M2 8 V2.2 C2 2 2 2 2.2 2 H7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function PrepIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+      <path d="M3 1.5 H7.5 L10 4 V10.5 H3 Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+      <path d="M4.6 5.4 L5.8 6.6 L8 4.2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ArchiveIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+      <rect x="2" y="3" width="10" height="2" rx="0.6" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M3 5 V11 H11 V5" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M5.5 7.5 H8.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function RestoreIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+      <path d="M3 7 A4 4 0 1 0 5 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none" />
+      <path d="M3 2 V4 H5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

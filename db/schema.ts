@@ -96,6 +96,7 @@ export const youtubeIdeas = pgTable("youtube_ideas", {
     verdict: text("verdict"),
     lesson: text("lesson"),
     filmedAt: date("filmed_at"),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
 });
 
 export const buzzStories = pgTable("buzz_stories", {

@@ -345,3 +345,25 @@ export async function restoreBuzzStory(id: number) {
     revalidatePath("/wire");
     return { success: true };
 }
+
+export async function archiveYoutubeIdea(id: string) {
+    await db.execute(sql`
+        UPDATE youtube_ideas
+        SET archived_at = now(), updated_at = now()
+        WHERE id = ${id}::uuid
+    `);
+    revalidatePath("/ideas");
+    revalidatePath(`/ideas/youtube/${id}`);
+    return { success: true };
+}
+
+export async function restoreYoutubeIdea(id: string) {
+    await db.execute(sql`
+        UPDATE youtube_ideas
+        SET archived_at = NULL, updated_at = now()
+        WHERE id = ${id}::uuid
+    `);
+    revalidatePath("/ideas");
+    revalidatePath(`/ideas/youtube/${id}`);
+    return { success: true };
+}
