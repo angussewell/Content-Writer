@@ -53,6 +53,12 @@ export default async function WirePage({
   `).catch(() => ({ rows: [{ c: 0 }] }));
   const ideasCount = (ideasCountRes.rows[0] as { c: number }).c;
 
+  const metricsCountRes = await db.execute(sql`
+    SELECT COUNT(DISTINCT instagram_metrics_id)::int AS c
+    FROM video_rewrites WHERE status = 'pending'
+  `).catch(() => ({ rows: [{ c: 0 }] }));
+  const metricsCount = (metricsCountRes.rows[0] as { c: number }).c;
+
   const viewSql =
     view === "spiked" ? sql`WHERE surfaced IS TRUE`
     : view === "all" ? sql`WHERE TRUE`
@@ -109,6 +115,7 @@ export default async function WirePage({
       <Topbar
         ideasCount={ideasCount}
         wireCount={counts.wire}
+        metricsCount={metricsCount}
         activeTab="wire"
         workspaceTabs={[
           { id: "write", label: "Write", count: ws.write_count, href: "/?tab=write" },

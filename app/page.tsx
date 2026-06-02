@@ -59,6 +59,12 @@ export default async function Dashboard({
   `).catch(() => ({ rows: [{ fresh: 0 }] }));
   const ideasCount = (ideasCountResult.rows[0] as { fresh: number }).fresh;
 
+  const metricsCountRes = await db.execute(sql`
+    SELECT COUNT(DISTINCT instagram_metrics_id)::int AS c
+    FROM video_rewrites WHERE status = 'pending'
+  `).catch(() => ({ rows: [{ c: 0 }] }));
+  const metricsCount = (metricsCountRes.rows[0] as { c: number }).c;
+
   // Scripts for current tab
   const statusFilter =
     currentTab === "write"
@@ -117,6 +123,7 @@ export default async function Dashboard({
     <>
       <Topbar
         ideasCount={ideasCount}
+        metricsCount={metricsCount}
         activeTab={currentTab}
         workspaceTabs={tabsMeta.map((t) => ({ id: t.id, label: t.label, count: t.count, href: `/?tab=${t.id}` }))}
       />

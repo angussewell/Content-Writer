@@ -367,3 +367,94 @@ export async function restoreYoutubeIdea(id: string) {
     revalidatePath(`/ideas/youtube/${id}`);
     return { success: true };
 }
+
+// ── Metrics (posted reels) ───────────────────────────────────────────────
+
+// Whitelist of inline-editable instagram_metrics columns + their coercion type.
+const EDITABLE_METRIC_FIELDS: Record<string, "int" | "text" | "bool" | "numeric"> = {
+    follows_generated: "int",
+    analyst_notes: "text",
+    is_trial_reel: "bool",
+    reach: "int",
+    likes: "int",
+    comments: "int",
+    shares: "int",
+    saves: "int",
+    avg_watch_time: "int",
+    skip_rate: "numeric",
+};
+
+export async function updateMetricField(
+    id: number,
+    field: string,
+    rawValue: string | boolean | null
+) {
+    const type = EDITABLE_METRIC_FIELDS[field];
+    if (!type) return { error: "Field not editable" };
+
+    let value: number | string | boolean | null;
+    if (type === "bool") {
+        value = rawValue === true || rawValue === "true";
+    } else if (rawValue === null || rawValue === "") {
+        value = null;
+    } else if (type === "int") {
+        const n = parseInt(String(rawValue), 10);
+        value = Number.isFinite(n) ? n : null;
+    } else if (type === "numeric") {
+        const n = parseFloat(String(rawValue));
+        value = Number.isFinite(n) ? String(n) : null;
+    } else {
+        value = String(rawValue);
+    }
+
+    // `field` is validated against the whitelist above, so sql.raw is safe here.
+    await db.execute(sql`
+        UPDATE instagram_metrics
+        SET ${sql.raw(field)} = ${value}, updated_at = now()
+        WHERE id = ${id}
+    `);
+    revalidatePath("/metrics");
+    revalidatePath(`/metrics/${id}`);
+    return { success: true, value };
+}
+
+export async function createRewrite(
+    instagramMetricsId: number,
+    rewriteRequest: string,
+    title?: string
+) {
+    if (!rewriteRequest.trim()) return { error: "Rewrite request cannot be empty" };
+    const res = await db.execute(sql`
+        INSERT INTO video_rewrites (instagram_metrics_id, rewrite_request, title, status)
+        VALUES (${instagramMetricsId}, ${rewriteRequest.trim()}, ${title?.trim() || null}, 'pending')
+        RETURNING id
+    `);
+    revalidatePath(`/metrics/${instagramMetricsId}`);
+    revalidatePath("/metrics");
+    return { success: true, id: (res.rows[0] as { id: number }).id };
+}
+
+export async function updateRewrite(
+    id: number,
+    instagramMetricsId: number,
+    rewriteRequest: string,
+    title?: string
+) {
+    if (!rewriteRequest.trim()) return { error: "Rewrite request cannot be empty" };
+    // Only pending rewrites can be edited.
+    await db.execute(sql`
+        UPDATE video_rewrites
+        SET rewrite_request = ${rewriteRequest.trim()}, title = ${title?.trim() || null}, updated_at = now()
+        WHERE id = ${id} AND status = 'pending'
+    `);
+    revalidatePath(`/metrics/${instagramMetricsId}`);
+    revalidatePath("/metrics");
+    return { success: true };
+}
+
+export async function deleteRewrite(id: number, instagramMetricsId: number) {
+    await db.execute(sql`DELETE FROM video_rewrites WHERE id = ${id}`);
+    revalidatePath(`/metrics/${instagramMetricsId}`);
+    revalidatePath("/metrics");
+    return { success: true };
+}

@@ -89,6 +89,12 @@ export default async function IdeasPage({
   `);
   const ws = wsCounts.rows[0] as { write_count: number; edit_count: number; archive_count: number };
 
+  const metricsCountRes = await db.execute(sql`
+    SELECT COUNT(DISTINCT instagram_metrics_id)::int AS c
+    FROM video_rewrites WHERE status = 'pending'
+  `).catch(() => ({ rows: [{ c: 0 }] }));
+  const metricsCount = (metricsCountRes.rows[0] as { c: number }).c;
+
   const orderSql = sort === "oldest" ? sql`ORDER BY created_at ASC` : sql`ORDER BY created_at DESC`;
 
   // ---- Video ideas query ----
@@ -159,6 +165,7 @@ export default async function IdeasPage({
     <>
       <Topbar
         ideasCount={counts.fresh}
+        metricsCount={metricsCount}
         activeTab="ideas"
         workspaceTabs={[
           { id: "write", label: "Write", count: ws.write_count, href: "/?tab=write" },

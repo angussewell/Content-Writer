@@ -122,3 +122,76 @@ export const scriptRevisions = pgTable("script_revisions", {
     introsSnapshot: jsonb("intros_snapshot").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// ── Posted-video analytics ───────────────────────────────────────────────
+// One row per posted Instagram reel. Spine of the Metrics tab.
+export const instagramMetrics = pgTable("instagram_metrics", {
+    id: integer("id").primaryKey(),
+    postId: integer("post_id"),
+    instagramId: text("instagram_id").notNull(),
+    avgWatchTime: integer("avg_watch_time"),
+    reach: integer("reach"),
+    likes: integer("likes"),
+    comments: integer("comments"),
+    shares: integer("shares"),
+    saves: integer("saves"),
+    mediaUrl: text("media_url"),
+    caption: text("caption"),
+    mediaType: text("media_type"),
+    permalink: text("permalink"),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+    skipRate: text("skip_rate"),
+    followsGenerated: integer("follows_generated"),
+    analystNotes: text("analyst_notes"),
+    isTrialReel: boolean("is_trial_reel").default(false),
+    youtubeShortsUploaded: boolean("youtube_shorts_uploaded").default(false),
+    tiktokUploaded: boolean("tiktok_uploaded").default(false),
+    titleHook: text("title_hook"),
+    retentionCurve: jsonb("retention_curve"),
+});
+
+// 1:1 with instagram_metrics. Read-only in the UI, hidden by default.
+export const videoContentAnalysis = pgTable("video_content_analysis", {
+    id: integer("id").primaryKey(),
+    instagramMetricsId: integer("instagram_metrics_id").notNull(),
+    transcript: text("transcript"),
+    visualDescription: text("visual_description"),
+    processingStatus: text("processing_status").default("pending"),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+// Locked q1–q15 descriptor set per reel. Read-only in the UI.
+export const videoFeatures = pgTable("video_features", {
+    id: bigint("id", { mode: "number" }).primaryKey(),
+    instagramMetricsId: integer("instagram_metrics_id").notNull(),
+    questionSetVersion: text("question_set_version").notNull(),
+    descriptors: jsonb("descriptors").notNull(),
+    extractorRunId: uuid("extractor_run_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    batchId: uuid("batch_id"),
+    sourceTranscriptHash: text("source_transcript_hash"),
+    analyzedAt: timestamp("analyzed_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// One posted video → many rewrites. Consumed by the posted-video-rewrite skill.
+export const videoRewrites = pgTable("video_rewrites", {
+    id: integer("id").primaryKey(),
+    instagramMetricsId: integer("instagram_metrics_id").notNull(),
+    title: text("title"),
+    rewriteRequest: text("rewrite_request").notNull(),
+    status: text("status").default("pending").notNull(),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    claimedBy: text("claimed_by"),
+    resultScriptId: uuid("result_script_id").references(() => scripts.id, { onDelete: "set null" }),
+    notes: text("notes"),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+    index("idx_video_rewrites_status").on(t.status),
+    index("idx_video_rewrites_metrics_id").on(t.instagramMetricsId),
+]);
