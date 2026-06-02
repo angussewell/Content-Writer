@@ -368,6 +368,43 @@ export async function restoreYoutubeIdea(id: string) {
     return { success: true };
 }
 
+export async function updateYoutubeNotes(id: string, notes: string) {
+    await db.execute(sql`
+        UPDATE youtube_ideas
+        SET notes = ${notes}, updated_at = now()
+        WHERE id = ${id}::uuid
+    `);
+    revalidatePath(`/ideas/youtube/${id}`);
+    return { success: true };
+}
+
+export async function updateYoutubeTitle(id: string, title: string) {
+    const clean = title.trim() || "Untitled concept";
+    await db.execute(sql`
+        UPDATE youtube_ideas
+        SET title = ${clean}, updated_at = now()
+        WHERE id = ${id}::uuid
+    `);
+    revalidatePath("/ideas");
+    revalidatePath(`/ideas/youtube/${id}`);
+    return { success: true, title: clean };
+}
+
+const YT_STAGES = ["idea", "prepped", "filmed", "posted"] as const;
+export async function updateYoutubeStage(id: string, stage: string) {
+    if (!YT_STAGES.includes(stage as (typeof YT_STAGES)[number])) {
+        return { success: false };
+    }
+    await db.execute(sql`
+        UPDATE youtube_ideas
+        SET status = ${stage}, updated_at = now()
+        WHERE id = ${id}::uuid
+    `);
+    revalidatePath("/ideas");
+    revalidatePath(`/ideas/youtube/${id}`);
+    return { success: true };
+}
+
 // ── Metrics (posted reels) ───────────────────────────────────────────────
 
 // Whitelist of inline-editable instagram_metrics columns + their coercion type.
