@@ -136,7 +136,7 @@ function DocHeader({
     setCopied(true);
     if (copyTimer.current) clearTimeout(copyTimer.current);
     copyTimer.current = setTimeout(() => setCopied(false), 1600);
-    showToast("Reaction-prep prompt copied");
+    showToast("Concept copied — paste into Claude Code");
   }
 
   function toggleArchive() {
@@ -277,7 +277,7 @@ function DocHeader({
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M3 7 L6 10 L11 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              <span>Prompt copied</span>
+              <span>Concept copied</span>
             </>
           ) : (
             <>
@@ -285,7 +285,7 @@ function DocHeader({
                 <path d="M3.5 1.5 H9 L12 4.5 V12.5 H3.5 Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
                 <path d="M5.5 6.4 L7 7.9 L9.6 4.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              <span>Copy reaction-prep prompt</span>
+              <span>Copy concept</span>
             </>
           )}
         </button>

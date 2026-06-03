@@ -78,7 +78,11 @@ const YT_STAGE_LABEL: Record<string, string> = {
 };
 
 export function reactionPrompt(idea: { id: string; title: string }) {
-  return `Use the youtube-reaction-prep skill on the YouTube concept "${idea.title}" — youtube_ideas id ${idea.id}`;
+  return `YouTube concept "${idea.title}" — youtube_ideas id ${idea.id}`;
+}
+
+export function videoIdeaPrompt(idea: { id: string; transcript: string }) {
+  return `Idea #${idea.id}\n\n${idea.transcript}`;
 }
 
 function shortFormat(format: string | null): string | null {
@@ -135,12 +139,12 @@ export function IdeasClient({
     showToast(toastMsg);
   }
 
-  function copyVideoPrompt(id: string) {
-    copyText(id, `Run the idea-to-script skill on idea #${id}`, "Prompt copied — paste into Claude Code");
+  function copyVideoPrompt(idea: VideoIdea) {
+    copyText(idea.id, videoIdeaPrompt(idea), "Idea copied — paste into Claude Code");
   }
 
   function copyReactionPrompt(idea: YoutubeIdea) {
-    copyText(idea.id, reactionPrompt(idea), "Reaction-prep prompt copied");
+    copyText(idea.id, reactionPrompt(idea), "Concept copied — paste into Claude Code");
   }
 
   function onArchive(id: string) {
@@ -236,7 +240,7 @@ export function IdeasClient({
                     <button
                       className={"action action--primary" + (isCopied ? " action--copied" : "")}
                       onClick={() => copyReactionPrompt(idea)}
-                      title="Copy reaction-prep prompt for Claude Code"
+                      title="Copy concept for Claude Code"
                     >
                       {isCopied ? (
                         <>
@@ -248,7 +252,7 @@ export function IdeasClient({
                       ) : (
                         <>
                           <PrepIcon />
-                          <span>Prep reaction</span>
+                          <span>Copy concept</span>
                         </>
                       )}
                     </button>
@@ -306,13 +310,13 @@ export function IdeasClient({
                 key={idea.id}
                 className="slip"
                 data-status={status}
-                onClick={() => copyVideoPrompt(idea.id)}
+                onClick={() => copyVideoPrompt(idea)}
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    copyVideoPrompt(idea.id);
+                    copyVideoPrompt(idea);
                   }
                 }}
               >
@@ -350,8 +354,8 @@ export function IdeasClient({
                 <div className="slip__actions" onClick={(e) => e.stopPropagation()}>
                   <button
                     className={"action action--primary" + (isCopied ? " action--copied" : "")}
-                    onClick={() => copyVideoPrompt(idea.id)}
-                    title="Copy prompt for Claude Code"
+                    onClick={() => copyVideoPrompt(idea)}
+                    title="Copy idea for Claude Code"
                   >
                     {isCopied ? (
                       <>
