@@ -25,7 +25,7 @@ export default async function WirePage({
 }: {
   searchParams: Promise<{ view?: string; platform?: string; sort?: string; q?: string }>;
 }) {
-  const { view = "wire", platform = "all", sort = "score", q = "" } = await searchParams;
+  const { view = "wire", platform = "all", sort = "recent", q = "" } = await searchParams;
 
   const countsResult = await db.execute(sql`
     SELECT
@@ -104,7 +104,7 @@ export default async function WirePage({
     const merged = { view, platform, sort, q, ...overrides };
     if (merged.view && merged.view !== "wire") params.set("view", merged.view);
     if (merged.platform && merged.platform !== "all") params.set("platform", merged.platform);
-    if (merged.sort && merged.sort !== "score") params.set("sort", merged.sort);
+    if (merged.sort && merged.sort !== "recent") params.set("sort", merged.sort);
     if (merged.q) params.set("q", merged.q);
     const qs = params.toString();
     return qs ? `/wire?${qs}` : "/wire";
@@ -164,7 +164,7 @@ export default async function WirePage({
               <input type="search" name="q" defaultValue={q} placeholder="Search the tape…" />
               {view !== "wire" && <input type="hidden" name="view" value={view} />}
               {platform !== "all" && <input type="hidden" name="platform" value={platform} />}
-              {sort !== "score" && <input type="hidden" name="sort" value={sort} />}
+              {sort !== "recent" && <input type="hidden" name="sort" value={sort} />}
             </form>
 
             <span className="filterrow__spacer" />
