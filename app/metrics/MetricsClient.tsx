@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback, useTransition } from "react";
 import Link from "next/link";
 import type { ReelRow } from "./page";
 import { updateMetricField } from "@/app/actions";
+import { buildRepurposeBlob } from "@/lib/repurpose";
 
 function fmtDate(d: string | null) {
   if (!d) return "—";
@@ -51,6 +52,13 @@ const cmp = (a: number | null, b: number | null, dir: 1 | -1) => {
   return (a - b) * dir;
 };
 
+function compactNum(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`;
+  if (n >= 10_000) return `${(n / 1_000).toFixed(0)}k`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return n.toLocaleString();
+}
+
 export function MetricsClient({ rows }: { rows: ReelRow[] }) {
   const [q, setQ] = useState("");
   const [trial, setTrial] = useState<TriFilter>("all");
@@ -60,7 +68,18 @@ export function MetricsClient({ rows }: { rows: ReelRow[] }) {
   const [sortDir, setSortDir] = useState<1 | -1>(-1);
   // optimistic overrides for inline-edited follows
   const [followEdits, setFollowEdits] = useState<Record<number, number | null>>({});
+  const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+
+  const copyRepurpose = useCallback(async (r: ReelRow) => {
+    const blob = buildRepurposeBlob({ id: r.id, title: reelLabel(r), permalink: r.permalink });
+    try { await navigator.clipboard.writeText(blob); } catch { /* ignore */ }
+    setCopiedId(r.id);
+    setTimeout(() => setCopiedId((c) => (c === r.id ? null : c)), 1600);
+    setToast("Copied — paste into plan-post reel-repurpose");
+    setTimeout(() => setToast(null), 1800);
+  }, []);
 
   const followOf = useCallback(
     (r: ReelRow) => (r.id in followEdits ? followEdits[r.id] : r.follows_generated),
@@ -116,6 +135,21 @@ export function MetricsClient({ rows }: { rows: ReelRow[] }) {
     return out;
   }, [rows, q, trial, curve, needsRewrite, sortKey, sortDir, followOf]);
 
+  const summary = useMemo(() => {
+    const sum = (pick: (r: ReelRow) => number | null) =>
+      rows.reduce((acc, r) => acc + (pick(r) ?? 0), 0);
+    const skips = rows.map((r) => (r.skip_rate ? parseFloat(r.skip_rate) : NaN)).filter((n) => Number.isFinite(n));
+    const medianSkip = skips.length
+      ? [...skips].sort((a, b) => a - b)[Math.floor(skips.length / 2)]
+      : null;
+    return {
+      count: rows.length,
+      reach: sum((r) => r.reach),
+      follows: rows.reduce((acc, r) => acc + (followOf(r) ?? 0), 0),
+      medianSkip,
+    };
+  }, [rows, followOf]);
+
   const triLabel = (f: TriFilter, on: string, off: string) =>
     f === "yes" ? on : f === "no" ? off : `${on} / ${off}`;
   const cycleTri = (cur: TriFilter): TriFilter =>
@@ -135,6 +169,28 @@ export function MetricsClient({ rows }: { rows: ReelRow[] }) {
 
   return (
     <div className="m-wrap">
+      {toast && <div className="m-toast">{toast}</div>}
+
+      {/* Summary strip */}
+      <div className="m-summary">
+        <div className="m-summary__cell">
+          <span className="m-summary__num">{summary.count.toLocaleString()}</span>
+          <span className="m-summary__label">Reels</span>
+        </div>
+        <div className="m-summary__cell">
+          <span className="m-summary__num">{compactNum(summary.reach)}</span>
+          <span className="m-summary__label">Total reach</span>
+        </div>
+        <div className="m-summary__cell">
+          <span className="m-summary__num">{compactNum(summary.follows)}</span>
+          <span className="m-summary__label">Follows generated</span>
+        </div>
+        <div className="m-summary__cell">
+          <span className="m-summary__num">{summary.medianSkip == null ? "—" : `${summary.medianSkip.toFixed(0)}%`}</span>
+          <span className="m-summary__label">Median skip</span>
+        </div>
+      </div>
+
       {/* Controls */}
       <div className="m-controls">
         <div className="m-search">
@@ -185,11 +241,12 @@ export function MetricsClient({ rows }: { rows: ReelRow[] }) {
               <Th k="watch" align="right">Watch</Th>
               <Th k="saves" align="right">Saves</Th>
               <Th k="shares" align="right">Shares</Th>
+              <th className="m-th m-th--right" aria-label="Actions" />
             </tr>
           </thead>
           <tbody>
             {view.length === 0 ? (
-              <tr><td colSpan={8} className="m-empty">No reels match these filters.</td></tr>
+              <tr><td colSpan={9} className="m-empty">No reels match these filters.</td></tr>
             ) : view.map((r) => (
               <tr key={r.id} className="m-row">
                 <td className="m-cell m-cell--label">
@@ -231,6 +288,15 @@ export function MetricsClient({ rows }: { rows: ReelRow[] }) {
                 <td className="m-cell m-cell--num">{watchSecs(r.avg_watch_time)}</td>
                 <td className="m-cell m-cell--num">{num(r.saves)}</td>
                 <td className="m-cell m-cell--num">{num(r.shares)}</td>
+                <td className="m-cell m-cell--actions">
+                  <button
+                    className={"m-copybtn" + (copiedId === r.id ? " m-copybtn--ok" : "")}
+                    title="Copy reel for plan-post reel-repurpose"
+                    onClick={() => copyRepurpose(r)}
+                  >
+                    {copiedId === r.id ? "Copied ✓" : "Repurpose"}
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>

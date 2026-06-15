@@ -9,6 +9,7 @@ import {
   updateRewrite,
   deleteRewrite,
 } from "@/app/actions";
+import { buildRepurposeBlob } from "@/lib/repurpose";
 
 function firstLine(s: string | null): string {
   if (!s) return "";
@@ -99,10 +100,18 @@ export function MetricDetailClient({ reel, rewrites: initialRewrites }: { reel: 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [repurposeCopied, setRepurposeCopied] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [, start] = useTransition();
 
   const flash = (t: string) => { setToast(t); setTimeout(() => setToast(null), 1800); };
+
+  const copyRepurpose = useCallback(async () => {
+    const blob = buildRepurposeBlob({ id: reel.id, title: label(reel), permalink: reel.permalink });
+    try { await navigator.clipboard.writeText(blob); } catch { /* ignore */ }
+    setRepurposeCopied(true); setTimeout(() => setRepurposeCopied(false), 1600);
+    flash("Copied — paste into plan-post reel-repurpose");
+  }, [reel]);
 
   const toggleTrial = useCallback(() => {
     const next = !trial; setTrial(next);
@@ -169,7 +178,16 @@ export function MetricDetailClient({ reel, rewrites: initialRewrites }: { reel: 
 
       {/* Header */}
       <header className="m-detail__head">
-        <div className="pagehead__eyebrow">Reel #{reel.id}</div>
+        <div className="m-detail__headrow">
+          <div className="pagehead__eyebrow">Reel #{reel.id}</div>
+          <button
+            className={"m-btn m-btn--accent m-repurpose" + (repurposeCopied ? " m-repurpose--ok" : "")}
+            title="Copy reel for plan-post reel-repurpose"
+            onClick={copyRepurpose}
+          >
+            {repurposeCopied ? "Copied ✓" : "Copy to repurpose"}
+          </button>
+        </div>
         <h1 className="m-detail__title">{label(reel)}</h1>
         <div className="m-detail__meta">
           <span>{fmtDate(reel.created_at)}</span>
