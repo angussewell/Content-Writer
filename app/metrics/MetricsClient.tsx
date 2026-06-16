@@ -63,6 +63,7 @@ export function MetricsClient({ rows }: { rows: ReelRow[] }) {
   const [q, setQ] = useState("");
   const [trial, setTrial] = useState<TriFilter>("all");
   const [curve, setCurve] = useState<TriFilter>("all");
+  const [repurposed, setRepurposed] = useState<TriFilter>("all");
   const [needsRewrite, setNeedsRewrite] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDir, setSortDir] = useState<1 | -1>(-1);
@@ -114,6 +115,8 @@ export function MetricsClient({ rows }: { rows: ReelRow[] }) {
       if (trial === "no" && r.is_trial_reel) return false;
       if (curve === "yes" && !r.has_curve) return false;
       if (curve === "no" && r.has_curve) return false;
+      if (repurposed === "yes" && !r.repurposed) return false;
+      if (repurposed === "no" && r.repurposed) return false;
       if (needsRewrite && r.pending_rewrites <= 0) return false;
       if (needle && !reelLabel(r).toLowerCase().includes(needle)) return false;
       return true;
@@ -133,7 +136,7 @@ export function MetricsClient({ rows }: { rows: ReelRow[] }) {
       }
     });
     return out;
-  }, [rows, q, trial, curve, needsRewrite, sortKey, sortDir, followOf]);
+  }, [rows, q, trial, curve, repurposed, needsRewrite, sortKey, sortDir, followOf]);
 
   const summary = useMemo(() => {
     const sum = (pick: (r: ReelRow) => number | null) =>
@@ -221,6 +224,12 @@ export function MetricsClient({ rows }: { rows: ReelRow[] }) {
           <span className="chip__dot" /> {curve === "all" ? "Curve" : triLabel(curve, "Has curve", "No curve")}
         </button>
         <button
+          className={"chip " + (repurposed !== "all" ? "chip--on" : "")}
+          onClick={() => setRepurposed(cycleTri)}
+        >
+          <span className="chip__dot" /> {repurposed === "all" ? "Repurposed" : triLabel(repurposed, "Repurposed", "Not repurposed")}
+        </button>
+        <button
           className={"chip " + (needsRewrite ? "chip--on" : "")}
           onClick={() => setNeedsRewrite((v) => !v)}
         >
@@ -252,6 +261,9 @@ export function MetricsClient({ rows }: { rows: ReelRow[] }) {
                 <td className="m-cell m-cell--label">
                   <Link href={`/metrics/${r.id}`} className="m-label">
                     {r.is_trial_reel && <span className="m-tag m-tag--trial" title="Trial reel">T</span>}
+                    {r.repurposed && (
+                      <span className="m-tag m-tag--repurposed" title="Already repurposed into a Substack post">↗ Substack</span>
+                    )}
                     {r.pending_rewrites > 0 && (
                       <span className="m-tag m-tag--rewrite" title={`${r.pending_rewrites} pending rewrite${r.pending_rewrites === 1 ? "" : "s"}`}>
                         ✎ {r.pending_rewrites}

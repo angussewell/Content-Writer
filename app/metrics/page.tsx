@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { sql } from "drizzle-orm";
 import { Topbar } from "@/components/Topbar";
+import { getRepurposedReelIds } from "@/lib/repurposedReels";
 import { MetricsClient } from "./MetricsClient";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +24,7 @@ export type ReelRow = {
   is_trial_reel: boolean | null;
   has_curve: boolean;
   pending_rewrites: number;
+  repurposed: boolean;
 };
 
 export default async function MetricsPage() {
@@ -70,7 +72,11 @@ export default async function MetricsPage() {
     LEFT JOIN video_content_analysis vca ON vca.instagram_metrics_id = m.id
     ORDER BY m.created_at DESC, m.id DESC
   `).catch(() => ({ rows: [] }));
-  const rows = rowsRes.rows as ReelRow[];
+  const repurposedIds = await getRepurposedReelIds();
+  const rows = (rowsRes.rows as Omit<ReelRow, "repurposed">[]).map((r) => ({
+    ...r,
+    repurposed: repurposedIds.has(r.id),
+  }));
 
   return (
     <>

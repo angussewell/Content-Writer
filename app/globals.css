@@ -2188,6 +2188,7 @@ body::before {
 }
 .m-tag--trial { background: var(--paper-3); color: var(--ink-3); border: 1px solid var(--hairline); }
 .m-tag--rewrite { background: var(--accent-soft); color: var(--accent-ink); }
+.m-tag--repurposed { background: var(--accent); color: var(--paper); }
 
 .m-extlink { color: var(--ink-4); margin-left: 6px; display: inline-flex; vertical-align: middle; }
 .m-extlink:hover { color: var(--accent); }

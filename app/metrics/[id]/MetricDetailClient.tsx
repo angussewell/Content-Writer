@@ -89,7 +89,7 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`m-rwbadge m-rwbadge--${status}`}>{status}</span>;
 }
 
-export function MetricDetailClient({ reel, rewrites: initialRewrites }: { reel: ReelDetail; rewrites: RewriteRow[] }) {
+export function MetricDetailClient({ reel, rewrites: initialRewrites, repurposed }: { reel: ReelDetail; rewrites: RewriteRow[]; repurposed: boolean }) {
   const [rewrites, setRewrites] = useState<RewriteRow[]>(initialRewrites);
   const [trial, setTrial] = useState<boolean>(!!reel.is_trial_reel);
   const [notes, setNotes] = useState<string>(reel.analyst_notes ?? "");
@@ -190,6 +190,12 @@ export function MetricDetailClient({ reel, rewrites: initialRewrites }: { reel: 
         </div>
         <h1 className="m-detail__title">{label(reel)}</h1>
         <div className="m-detail__meta">
+          {repurposed && (
+            <>
+              <span className="m-tag m-tag--repurposed" title="Already repurposed into a Substack post">↗ Substack</span>
+              <span className="m-dot">·</span>
+            </>
+          )}
           <span>{fmtDate(reel.created_at)}</span>
           <span className="m-dot">·</span>
           <button className={"m-trial " + (trial ? "m-trial--on" : "")} onClick={toggleTrial}>

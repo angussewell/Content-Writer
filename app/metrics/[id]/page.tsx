@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { sql } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { getRepurposedReelIds } from "@/lib/repurposedReels";
 import { MetricDetailClient } from "./MetricDetailClient";
 
 export const dynamic = "force-dynamic";
@@ -81,6 +82,8 @@ export default async function ReelDetailPage({ params }: { params: Promise<{ id:
   `).catch(() => ({ rows: [] }));
   const rewrites = rewritesRes.rows as RewriteRow[];
 
+  const repurposed = (await getRepurposedReelIds()).has(id);
+
   return (
     <main className="main">
       <div className="container container--narrow">
@@ -92,7 +95,7 @@ export default async function ReelDetailPage({ params }: { params: Promise<{ id:
             All reels
           </Link>
         </div>
-        <MetricDetailClient reel={reel} rewrites={rewrites} />
+        <MetricDetailClient reel={reel} rewrites={rewrites} repurposed={repurposed} />
       </div>
     </main>
   );
