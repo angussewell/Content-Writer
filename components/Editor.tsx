@@ -299,7 +299,7 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                         />
 
                         <button
-                            className="cw-iconbtn"
+                            className="cw-iconbtn cw-iconbtn--context"
                             onClick={() => setContextOpen((o) => !o)}
                             title="Toggle context"
                             style={{ opacity: contextOpen ? 1 : 0.5 }}

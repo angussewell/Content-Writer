@@ -68,7 +68,7 @@ export function AssetsTrigger({ onClick, count }: { onClick: () => void; count: 
     return (
         <button className="as-trigger" onClick={onClick} title="Open asset library">
             <ImageIcon />
-            <span>Assets</span>
+            <span className="as-trigger__label">Assets</span>
             <span className="as-trigger__count">{count}</span>
         </button>
     );

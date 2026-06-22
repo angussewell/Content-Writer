@@ -2336,3 +2336,93 @@ body::before {
   .m-label__text { max-width: 200px; }
   .m-copybtn { opacity: 1; }
 }
+
+/* ============================================================
+   MOBILE OVERHAUL — content-writer-frontend (entity 553, #1717)
+   Phone-first rules. Lives last for cascade priority. Primary
+   breakpoint 720px; 420px tightens for true phone widths.
+   ============================================================ */
+@media (max-width: 720px) {
+  /* — Bleed guard: nothing scrolls the page sideways — */
+  html, body { overflow-x: clip; }
+
+  /* — Header: compact two rows, fits one screen, no page bleed — */
+  .topbar__row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "brand actions"
+      "tabs  tabs";
+    align-items: center;
+    gap: 8px 12px;
+    height: auto;
+    padding-top: 9px; padding-bottom: 7px;
+  }
+  .topbar__brand { grid-area: brand; min-width: 0; }
+  .brand__word { white-space: nowrap; font-size: 17px; }
+  .topbar__right { grid-area: actions; }
+  .tabs {
+    grid-area: tabs;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    min-width: 0;
+    gap: 2px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    margin: 0 -20px;
+    padding: 2px 20px;
+    scroll-snap-type: x proximity;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 18px, #000 calc(100% - 18px), transparent);
+            mask-image: linear-gradient(90deg, transparent, #000 18px, #000 calc(100% - 18px), transparent);
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { flex: 0 0 auto; scroll-snap-align: start; padding: 7px 12px; }
+  .tab--seam { margin: 0 2px; }
+  .cta { padding: 0 13px; }
+
+  /* — Main: trim the generous desktop top padding — */
+  .main { padding: 28px 0 64px; }
+  .pagehead { margin-bottom: 24px; }
+
+  /* — Home filter row: wrap cleanly, no ragged overflow — */
+  .filterrow { flex-wrap: wrap; gap: 8px 6px; padding: 12px 0 18px; }
+  .filterrow__spacer { flex-basis: 100%; height: 0; }
+  .filterrow__sortlabel { margin-right: 2px; }
+  .chip, .chip--ghost, .sortpill { white-space: nowrap; }
+
+  /* — Home marginalia card: date sidebar → inline meta bar — */
+  .grid--marginalia { gap: 12px; }
+  .card--marginalia { grid-template-columns: 1fr; gap: 12px; padding: 18px; }
+  .marg__aside {
+    flex-direction: row; align-items: center;
+    border-right: none; padding-right: 0;
+    border-bottom: 1px solid var(--hairline-soft); padding-bottom: 10px;
+  }
+  .marg__spacer { min-height: 0; }
+  .marg__body { gap: 10px; }
+  .card__title--serif { font-size: 19px; }
+
+  /* — Segmented control (Ideas/Wire filters): keep all segments reachable — */
+  .segmented {
+    max-width: 100%; flex-wrap: nowrap;
+    overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  }
+  .segmented::-webkit-scrollbar { display: none; }
+  .segmented__btn { flex: 0 0 auto; }
+
+  /* — Script editor header: fit one row, surface the essentials — */
+  .cw-header-row { gap: 8px; }
+  .cw-header-actions { gap: 4px; min-width: 0; }
+  .cw-header-actions .cw-vrule { display: none; }
+  .cw-header-actions .cw-iconbtn { display: none; }  /* context-toggle (rail hidden < 1200px) + copy: secondary on touch */
+  .as-trigger__label { display: none; }      /* Assets → icon + count only */
+  .cw-kbd { display: none; }                 /* no ⌘S hint on touch */
+  .cw-save { padding: 8px 14px; margin-left: 2px; white-space: nowrap; }
+  .cw-back { padding: 6px 6px; }
+}
+
+@media (max-width: 420px) {
+  .container { padding: 0 16px; }
+  .tabs { margin: 0 -16px; padding: 2px 16px; }
+  .pagehead__title { font-size: 30px; }
+}
