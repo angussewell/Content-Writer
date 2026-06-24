@@ -23,8 +23,10 @@ function scoreTier(s: number | null): "hot" | "warm" | "cool" {
   return "cool";
 }
 
-function assignPrompt(story: BuzzStory) {
-  return `Write a Reel reacting to buzz story #${story.id}: "${story.summary}" — angle: ${story.react_angle}`;
+function storyPrompt(story: BuzzStory) {
+  const head = `Buzz story #${story.id}: "${story.summary}"`;
+  const withAngle = story.react_angle ? `${head} — angle: ${story.react_angle}` : head;
+  return story.top_url ? `${withAngle}\nSource: ${story.top_url}` : withAngle;
 }
 
 export function WireClient({
@@ -58,14 +60,14 @@ export function WireClient({
 
   const assign = useCallback(async (story: BuzzStory) => {
     try {
-      await navigator.clipboard.writeText(assignPrompt(story));
+      await navigator.clipboard.writeText(storyPrompt(story));
     } catch {
       /* ignore */
     }
     setCopiedId(story.id);
     if (copiedTimer.current) clearTimeout(copiedTimer.current);
     copiedTimer.current = setTimeout(() => setCopiedId(null), 1700);
-    showToast("Pitch copied — paste into Claude Code");
+    showToast("Prompt copied — paste into Claude Code");
   }, [showToast]);
 
   const spike = useCallback((id: number) => {
@@ -188,7 +190,7 @@ export function WireClient({
       <div className="wire-keyhint">
         <Key>J</Key><Key>K</Key> move
         <span className="wire-keyhint__sep" />
-        <Key>↵</Key> assign
+        <Key>↵</Key> copy
         <span className="wire-keyhint__sep" />
         <Key>X</Key> spike
         <span className="wire-keyhint__sep" />
@@ -251,7 +253,7 @@ function LeadStory({ story, peakBuzz, active, copied, pending, assign, spike, re
             onClick={() => assign(story)}
           >
             {copied ? <CheckIcon /> : <AssignIcon />}
-            <span>{copied ? "Pitch copied" : "Assign — write the Reel"}</span>
+            <span>{copied ? "Copied" : "Copy prompt"}</span>
           </button>
           {story.top_url && (
             <button className="wire-btn" onClick={() => openSource(story)}>
@@ -313,10 +315,10 @@ function WireRow({ story, rank, peakBuzz, active, copied, pending, assign, spike
         <button
           className={"wire-btn wire-btn--assign wire-btn--sm" + (copied ? " is-done" : "")}
           onClick={() => assign(story)}
-          title="Copy pitch for Claude Code"
+          title="Copy prompt for Claude Code"
         >
           {copied ? <CheckIcon /> : <AssignIcon />}
-          <span>{copied ? "Copied" : "Assign"}</span>
+          <span>{copied ? "Copied" : "Copy prompt"}</span>
         </button>
         {story.top_url && (
           <button className="wire-btn wire-btn--icon" onClick={() => openSource(story)} title="Open source">
