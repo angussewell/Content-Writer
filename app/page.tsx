@@ -26,7 +26,9 @@ function parseBody(body: string | null) {
 type Script = {
   id: string;
   title: string;
-  body: string;
+  // Card preview is built from content_writer.script_lines (decision #118),
+  // not the deprecated scripts.body column. Null when a script has no lines.
+  lines_preview: string | null;
   status: string;
   edit_status: string;
   created_at: Date;
@@ -84,7 +86,22 @@ export default async function Dashboard({
       : sql`ORDER BY s.updated_at DESC`;
 
   const result = await db.execute(sql`
-    SELECT s.id, s.title, s.body, s.status, s.edit_status, s.created_at, s.updated_at,
+    SELECT s.id, s.title, s.status, s.edit_status, s.created_at, s.updated_at,
+      (
+        -- Preview built from script_lines (decision #118), not scripts.body.
+        -- Each line: leading on-screen cue as a [bracketed] tag, then the spoken
+        -- line; concatenated in numeric position order, capped for the card clamp.
+        SELECT left(string_agg(
+          concat_ws(' ',
+            CASE WHEN NULLIF(btrim(sl.on_screen), '') IS NOT NULL
+                 THEN '[' || btrim(sl.on_screen) || ']' END,
+            NULLIF(btrim(sl.say), '')
+          ),
+          ' ' ORDER BY sl.position
+        ), 400) AS preview
+        FROM script_lines sl
+        WHERE sl.script_id = s.id
+      ) AS lines_preview,
       (SELECT COUNT(*)::int FROM script_feedback sf
        WHERE sf.script_id = s.id AND sf.addressed_at IS NULL) AS pending_feedback_count
     FROM scripts s
@@ -179,7 +196,8 @@ export default async function Dashboard({
               </div>
             ) : (
               scripts.map((script) => {
-                const parts = parseBody(script.body);
+                const preview = script.lines_preview?.trim() ?? "";
+                const parts = parseBody(preview);
                 return (
                   <Link key={script.id} href={`/${script.id}`} className="cardlink">
                     <article className="card card--marginalia">
@@ -193,12 +211,16 @@ export default async function Dashboard({
                           {script.title || "Untitled"}
                         </h2>
                         <div className="card__body">
-                          {parts.map((p, i) =>
-                            p.type === "tag" ? (
-                              <span key={i} className="onscreen-tag">{p.text}</span>
-                            ) : (
-                              <span key={i}>{p.text}</span>
+                          {preview ? (
+                            parts.map((p, i) =>
+                              p.type === "tag" ? (
+                                <span key={i} className="onscreen-tag">{p.text}</span>
+                              ) : (
+                                <span key={i}>{p.text}</span>
+                              )
                             )
+                          ) : (
+                            <span className="card__empty">No lines yet</span>
                           )}
                         </div>
                         <footer className="card__footer">

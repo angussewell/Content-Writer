@@ -103,6 +103,7 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
     const [assetsOpen, setAssetsOpen] = useState(false);
     const [feedbackOpen, setFeedbackOpen] = useState(false);
     const [contextOpen, setContextOpen] = useState(false);
+    const [idCopied, setIdCopied] = useState(false);
     const [activeSuggestion, setActiveSuggestion] = useState<{ introId: string | null; type: "hook" | "intro" | null; text: string }>({ introId: null, type: null, text: "" });
     const router = useRouter();
 
@@ -164,6 +165,16 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
         ].filter(Boolean).join("\n\n");
         navigator.clipboard.writeText(text);
         toast.success("Copied to clipboard");
+    };
+
+    // Copy the raw script UUID (needed to target skills/diagnostics at this
+    // script). Lives in the always-visible title block so it stays reachable on
+    // mobile, where the header icon buttons collapse (#2009).
+    const handleCopyId = () => {
+        navigator.clipboard.writeText(data.id);
+        setIdCopied(true);
+        setTimeout(() => setIdCopied(false), 1600);
+        toast.success("Script ID copied");
     };
 
     const handleStatus = (newStatus: string) => {
@@ -299,6 +310,25 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                             <span className="cw-eyebrow">Script</span>
                             <span className="cw-eyebrow-dot" />
                             <span className="cw-eyebrow" style={{ textTransform: "capitalize" }}>{data.status}</span>
+                            <button
+                                type="button"
+                                className={"cw-idbtn" + (idCopied ? " cw-idbtn--ok" : "")}
+                                title={`Copy script ID (${data.id})`}
+                                onClick={handleCopyId}
+                            >
+                                {idCopied ? (
+                                    <span>Copied ✓</span>
+                                ) : (
+                                    <>
+                                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                                            <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
+                                            <path d="M3 10.5 H2.5 A1 1 0 0 1 1.5 9.5 V2.5 A1 1 0 0 1 2.5 1.5 H9.5 A1 1 0 0 1 10.5 2.5 V3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                                        </svg>
+                                        <span className="cw-idbtn__label">Copy ID</span>
+                                        <span className="cw-idbtn__num">{data.id.slice(0, 8)}</span>
+                                    </>
+                                )}
+                            </button>
                         </div>
                         <TextareaAutosize
                             className="cw-title"
