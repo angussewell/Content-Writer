@@ -101,6 +101,7 @@ export function MetricDetailClient({ reel, rewrites: initialRewrites, repurposed
   const [editDraft, setEditDraft] = useState("");
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [repurposeCopied, setRepurposeCopied] = useState(false);
+  const [idCopied, setIdCopied] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [, start] = useTransition();
 
@@ -112,6 +113,13 @@ export function MetricDetailClient({ reel, rewrites: initialRewrites, repurposed
     setRepurposeCopied(true); setTimeout(() => setRepurposeCopied(false), 1600);
     flash("Copied — paste into plan-post reel-repurpose");
   }, [reel]);
+
+  // Copy the INTERNAL content_writer id (instagram_metrics.id) — raw number.
+  const copyId = useCallback(async () => {
+    try { await navigator.clipboard.writeText(String(reel.id)); } catch { /* ignore */ }
+    setIdCopied(true); setTimeout(() => setIdCopied(false), 1600);
+    flash(`ID ${reel.id} copied`);
+  }, [reel.id]);
 
   const toggleTrial = useCallback(() => {
     const next = !trial; setTrial(next);
@@ -180,13 +188,32 @@ export function MetricDetailClient({ reel, rewrites: initialRewrites, repurposed
       <header className="m-detail__head">
         <div className="m-detail__headrow">
           <div className="pagehead__eyebrow">Reel #{reel.id}</div>
-          <button
-            className={"m-btn m-btn--accent m-repurpose" + (repurposeCopied ? " m-repurpose--ok" : "")}
-            title="Copy reel for plan-post reel-repurpose"
-            onClick={copyRepurpose}
-          >
-            {repurposeCopied ? "Copied ✓" : "Copy to repurpose"}
-          </button>
+          <div className="m-detail__headactions">
+            <button
+              className={"m-idbtn" + (idCopied ? " m-idbtn--ok" : "")}
+              title={`Copy internal id (${reel.id})`}
+              onClick={copyId}
+            >
+              {idCopied ? (
+                "Copied ✓"
+              ) : (
+                <>
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
+                    <path d="M3 10.5 H2.5 A1 1 0 0 1 1.5 9.5 V2.5 A1 1 0 0 1 2.5 1.5 H9.5 A1 1 0 0 1 10.5 2.5 V3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                  </svg>
+                  <span className="m-idbtn__num">Copy ID {reel.id}</span>
+                </>
+              )}
+            </button>
+            <button
+              className={"m-btn m-btn--accent m-repurpose" + (repurposeCopied ? " m-repurpose--ok" : "")}
+              title="Copy reel for plan-post reel-repurpose"
+              onClick={copyRepurpose}
+            >
+              {repurposeCopied ? "Copied ✓" : "Copy to repurpose"}
+            </button>
+          </div>
         </div>
         <h1 className="m-detail__title">{label(reel)}</h1>
         <div className="m-detail__meta">

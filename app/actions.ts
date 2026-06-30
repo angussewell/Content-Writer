@@ -36,12 +36,15 @@ export async function createScript() {
     redirect(`/${newScript.id}`);
 }
 
-export async function updateScript(id: string, data: { title: string; body: string; intros: any[]; contextItems?: any[]; status?: "draft" | "filmed" | "done" | "archived" }) {
+export async function updateScript(id: string, data: { title: string; body?: string; intros: any[]; contextItems?: any[]; status?: "draft" | "filmed" | "done" | "archived" }) {
     console.log(`[updateScript] Received request for ID: ${id}`);
 
     await db.update(scripts).set({
         title: data.title,
-        body: data.body,
+        // Flat body is retired (decision #118); the editor no longer sends it.
+        // Only write body if a caller still provides it, so existing content is
+        // left intact rather than wiped to empty.
+        ...(data.body !== undefined ? { body: data.body } : {}),
         ...(data.status ? { status: data.status } : {}),
         updatedAt: new Date()
     }).where(eq(scripts.id, id));
@@ -109,6 +112,127 @@ export async function updateScript(id: string, data: { title: string; body: stri
 export async function deleteScript(id: string) {
     await db.delete(scripts).where(eq(scripts.id, id));
     redirect("/");
+}
+
+// ── Script lines (decision #118: line-by-line body) ───────────────────────
+// Frontend equivalent of the Content Agent MCP Add_Line / Update_Line /
+// Delete_Line tools — same script_lines / line_notes rows, written directly
+// the way every other write in this app is (server action → Postgres).
+
+type LineRow = {
+    id: string;
+    position: number;
+    say: string | null;
+    on_screen: string | null;
+    rationale: string | null;
+};
+
+// Add a line. With no `afterLineId` it appends (position = max+1). With one, it
+// inserts between that line and the next using a fractional position, so no
+// existing line has to be renumbered.
+export async function addScriptLine(scriptId: string, afterLineId?: string | null) {
+    let res;
+    if (afterLineId) {
+        res = await db.execute(sql`
+            WITH aft AS (
+                SELECT position AS p FROM script_lines WHERE id = ${afterLineId}::uuid
+            ),
+            nxt AS (
+                SELECT MIN(position) AS p FROM script_lines
+                WHERE script_id = ${scriptId}::uuid AND position > (SELECT p FROM aft)
+            )
+            INSERT INTO script_lines (script_id, position, say, on_screen, rationale)
+            SELECT ${scriptId}::uuid,
+                CASE WHEN (SELECT p FROM nxt) IS NULL
+                     THEN (SELECT p FROM aft) + 1
+                     ELSE ((SELECT p FROM aft) + (SELECT p FROM nxt)) / 2 END,
+                '', '', ''
+            RETURNING id, position, say, on_screen, rationale
+        `);
+    } else {
+        res = await db.execute(sql`
+            INSERT INTO script_lines (script_id, position, say, on_screen, rationale)
+            SELECT ${scriptId}::uuid, COALESCE(MAX(position), 0) + 1, '', '', ''
+            FROM script_lines WHERE script_id = ${scriptId}::uuid
+            RETURNING id, position, say, on_screen, rationale
+        `);
+    }
+    const row = res.rows[0] as LineRow;
+    revalidatePath(`/${scriptId}`);
+    return { success: true, line: { ...row, position: Number(row.position) } };
+}
+
+const EDITABLE_LINE_FIELDS = new Set(["say", "on_screen", "rationale"]);
+
+export async function updateScriptLine(
+    lineId: string,
+    scriptId: string,
+    field: "say" | "on_screen" | "rationale",
+    value: string
+) {
+    if (!EDITABLE_LINE_FIELDS.has(field)) return { error: "Field not editable" };
+    // `field` is validated against the whitelist above, so sql.raw is safe here.
+    await db.execute(sql`
+        UPDATE script_lines
+        SET ${sql.raw(field)} = ${value}, updated_at = now()
+        WHERE id = ${lineId}::uuid AND script_id = ${scriptId}::uuid
+    `);
+    revalidatePath(`/${scriptId}`);
+    return { success: true };
+}
+
+export async function deleteScriptLine(lineId: string, scriptId: string) {
+    // line_notes cascade-delete via FK.
+    await db.execute(sql`
+        DELETE FROM script_lines WHERE id = ${lineId}::uuid AND script_id = ${scriptId}::uuid
+    `);
+    revalidatePath(`/${scriptId}`);
+    return { success: true };
+}
+
+export async function addLineNote(
+    lineId: string,
+    scriptId: string,
+    author: "human" | "ai",
+    content: string
+) {
+    if (!content.trim()) return { error: "Note cannot be empty" };
+    const safeAuthor = author === "ai" ? "ai" : "human";
+    const res = await db.execute(sql`
+        INSERT INTO line_notes (line_id, script_id, author, content)
+        VALUES (${lineId}::uuid, ${scriptId}::uuid, ${safeAuthor}, ${content.trim()})
+        RETURNING id, author, content, addressed_at, created_at
+    `);
+    revalidatePath(`/${scriptId}`);
+    return { success: true, note: res.rows[0] };
+}
+
+export async function updateLineNote(noteId: string, scriptId: string, content: string) {
+    if (!content.trim()) return { error: "Note cannot be empty" };
+    await db.execute(sql`
+        UPDATE line_notes SET content = ${content.trim()}
+        WHERE id = ${noteId}::uuid AND script_id = ${scriptId}::uuid
+    `);
+    revalidatePath(`/${scriptId}`);
+    return { success: true };
+}
+
+export async function setLineNoteAddressed(noteId: string, scriptId: string, addressed: boolean) {
+    await db.execute(sql`
+        UPDATE line_notes
+        SET addressed_at = ${addressed ? sql`now()` : sql`NULL`}
+        WHERE id = ${noteId}::uuid AND script_id = ${scriptId}::uuid
+    `);
+    revalidatePath(`/${scriptId}`);
+    return { success: true };
+}
+
+export async function deleteLineNote(noteId: string, scriptId: string) {
+    await db.execute(sql`
+        DELETE FROM line_notes WHERE id = ${noteId}::uuid AND script_id = ${scriptId}::uuid
+    `);
+    revalidatePath(`/${scriptId}`);
+    return { success: true };
 }
 
 export async function updateScriptStatus(id: string, status: "draft" | "filmed" | "done" | "archived") {

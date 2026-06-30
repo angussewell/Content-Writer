@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useMemo, useEffect, useCallback, useRef, type JSX } from "react";
+import { useState, useTransition, useMemo, useEffect, useCallback } from "react";
 import TextareaAutosize from "react-textarea-autosize";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -11,6 +11,7 @@ import { FeedbackDock, FeedbackTrigger } from "./FeedbackDock";
 import { AssetsOverlay, AssetsTrigger } from "./AssetsOverlay";
 import ContextRail from "./ContextRail";
 import type { FeedbackItem } from "./FeedbackDock";
+import ScriptLines, { type LineData, type LineStats } from "./ScriptLines";
 
 /* ── Types ── */
 
@@ -37,7 +38,7 @@ interface ScriptImage {
 interface ScriptData {
     id: string;
     title: string;
-    body: string;
+    lines: LineData[];
     status: "draft" | "filmed" | "done" | "archived";
     editStatus: "idle" | "needs_ai_edit" | "ai_editing";
     editClaimedAt: Date | null;
@@ -45,75 +46,6 @@ interface ScriptData {
     contextItems?: ContextItem[];
     scriptImages?: ScriptImage[];
     feedback?: FeedbackItem[];
-}
-
-/* ── Body parsing ── */
-
-// Any content wrapped in square brackets is treated as an on-screen/graphic cue.
-// Format: [LABEL: content] or [content] — the label before the colon is displayed
-// as the pill key (e.g. "ON SCREEN", "SCREEN RECORDING", "B-ROLL").
-const DIRECTIVE_RE = /\[([^\]]+)\]/g;
-
-function parseDirective(raw: string): { label: string; content: string } {
-    const colonIdx = raw.indexOf(":");
-    if (colonIdx > 0) {
-        return { label: raw.slice(0, colonIdx).trim(), content: raw.slice(colonIdx + 1).trim() };
-    }
-    return { label: "On-screen", content: raw.trim() };
-}
-
-type Token = { type: "text"; text: string } | { type: "directive"; label: string; text: string };
-
-function tokenizeParagraph(text: string): Token[] {
-    const tokens: Token[] = [];
-    const re = new RegExp(DIRECTIVE_RE.source, "g");
-    let last = 0, m;
-    while ((m = re.exec(text)) !== null) {
-        if (m.index > last) tokens.push({ type: "text", text: text.slice(last, m.index) });
-        const { label, content } = parseDirective(m[1]);
-        tokens.push({ type: "directive", label, text: content });
-        last = m.index + m[0].length;
-    }
-    if (last < text.length) tokens.push({ type: "text", text: text.slice(last) });
-    return tokens;
-}
-
-type BodyBlock =
-    | { kind: "directive"; label: string; text: string; key: number }
-    | { kind: "para"; tokens: Token[]; key: number };
-
-function parseBody(body: string): BodyBlock[] {
-    const blocks: BodyBlock[] = [];
-    const directiveRe = new RegExp(DIRECTIVE_RE.source, "g");
-    let last = 0, key = 0, m;
-    while ((m = directiveRe.exec(body)) !== null) {
-        const before = body.slice(last, m.index);
-        if (before.trim()) {
-            for (const p of before.split(/\n{2,}/).map((s) => s.trimEnd()).filter(Boolean))
-                blocks.push({ kind: "para", tokens: tokenizeParagraph(p), key: key++ });
-        }
-        const { label, content } = parseDirective(m[1]);
-        blocks.push({ kind: "directive", label, text: content, key: key++ });
-        last = m.index + m[0].length;
-    }
-    const after = body.slice(last);
-    if (after.trim()) {
-        for (const p of after.split(/\n{2,}/).map((s) => s.trimEnd()).filter(Boolean))
-            blocks.push({ kind: "para", tokens: tokenizeParagraph(p), key: key++ });
-    }
-    return blocks;
-}
-
-function OnscreenPill({ label, text }: { label: string; text: string }) {
-    const words = text.split(/\s+/);
-    const preview = words.slice(0, 6).join(" ");
-    const truncated = words.length > 6;
-    return (
-        <span className="cw-onscreen-pill" data-full={text}>
-            <span className="cw-onscreen-pill__key">{label}</span>
-            <span className="cw-onscreen-pill__text">{preview}{truncated ? "…" : ""}</span>
-        </span>
-    );
 }
 
 /* ── Inline SVG icons ── */
@@ -154,12 +86,6 @@ const SparkIcon = () => (
         <path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8" />
     </svg>
 );
-const PenIcon = () => (
-    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-    </svg>
-);
-
 /* ── Status colors ── */
 const STATUS_COLORS: Record<string, string> = {
     draft: "#c69a3b",
@@ -174,26 +100,33 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
     const [data, setData] = useState<ScriptData>(initialData);
     const [isPending, startTransition] = useTransition();
     const [statusOpen, setStatusOpen] = useState(false);
-    const [bodyEditing, setBodyEditing] = useState(false);
     const [assetsOpen, setAssetsOpen] = useState(false);
     const [feedbackOpen, setFeedbackOpen] = useState(false);
     const [contextOpen, setContextOpen] = useState(false);
     const [activeSuggestion, setActiveSuggestion] = useState<{ introId: string | null; type: "hook" | "intro" | null; text: string }>({ introId: null, type: null, text: "" });
-    const bodyTaRef = useRef<HTMLTextAreaElement>(null);
     const router = useRouter();
 
+    // Live stats reported up from the line editor (decision #118: line-by-line body).
+    const initialStats = useMemo<LineStats>(() => {
+        const ls = initialData.lines;
+        return {
+            lines: ls.length,
+            cues: ls.filter((l) => l.onScreen.trim().length > 0).length,
+            words: ls.reduce((a, l) => a + l.say.split(/\s+/).filter(Boolean).length, 0),
+            bodyText: "",
+        };
+    }, [initialData.lines]);
+    const [lineStats, setLineStats] = useState<LineStats>(initialStats);
+    const handleStats = useCallback((s: LineStats) => setLineStats(s), []);
+
     const wordCount = useMemo(() => {
-        const text = [data.title, ...data.intros.map((i) => i.titleHook + " " + i.verbalIntro), data.body].join(" ");
-        return text.replace(/\[[^\]]*\]/g, "").split(/\s+/).filter(Boolean).length;
-    }, [data]);
+        const introText = [data.title, ...data.intros.map((i) => i.titleHook + " " + i.verbalIntro)].join(" ");
+        const introWords = introText.split(/\s+/).filter(Boolean).length;
+        return introWords + lineStats.words;
+    }, [data.title, data.intros, lineStats.words]);
 
-    const bodyBlocks = useMemo(() => parseBody(data.body), [data.body]);
-    const onScreenCount = bodyBlocks.filter((b) => b.kind === "directive").length;
+    const onScreenCount = lineStats.cues;
     const openFeedbackCount = (data.feedback || []).filter((f) => !f.addressedAt).length;
-
-    useEffect(() => {
-        if (bodyEditing) requestAnimationFrame(() => bodyTaRef.current?.focus());
-    }, [bodyEditing]);
 
     // ⌘S to save
     useEffect(() => {
@@ -210,9 +143,9 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
     const handleSave = () => {
         startTransition(async () => {
             try {
+                // Body is no longer sent — lines auto-save themselves (decision #118).
                 await updateScript(data.id, {
                     title: data.title,
-                    body: data.body,
                     intros: data.intros,
                     contextItems: data.contextItems || [],
                 });
@@ -227,7 +160,7 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
     const handleCopy = () => {
         const text = [
             ...data.intros.map((i) => i.verbalIntro).filter(Boolean),
-            data.body,
+            lineStats.bodyText,
         ].filter(Boolean).join("\n\n");
         navigator.clipboard.writeText(text);
         toast.success("Copied to clipboard");
@@ -444,7 +377,7 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                         </div>
                     </section>
 
-                    {/* Body section */}
+                    {/* Script lines (decision #118: line-by-line body) */}
                     <section className="cw-section">
                         <div className="cw-section-head">
                             <h2 className="cw-section-title">
@@ -452,68 +385,16 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                                 Script
                             </h2>
                             <span className="cw-section-rule" />
-                            <span className="cw-section-count">{onScreenCount} on-screen cue{onScreenCount === 1 ? "" : "s"}</span>
-                            <button
-                                className={"cw-section-add" + (bodyEditing ? " is-active" : "")}
-                                onClick={() => setBodyEditing((e) => !e)}
-                            >
-                                <PenIcon /><span>{bodyEditing ? "Preview" : "Edit"}</span>
-                            </button>
+                            <span className="cw-section-count">
+                                {lineStats.lines} line{lineStats.lines === 1 ? "" : "s"} · {onScreenCount} cue{onScreenCount === 1 ? "" : "s"}
+                            </span>
                         </div>
 
-                        {bodyEditing ? (
-                            <div className="cw-body-edit">
-                                <TextareaAutosize
-                                    className="cw-body-textarea"
-                                    value={data.body}
-                                    onChange={(e) => setData({ ...data, body: e.target.value })}
-                                    onBlur={() => setBodyEditing(false)}
-                                    placeholder="Begin the script…"
-                                    minRows={14}
-                                />
-                                <p className="cw-edit-hint">
-                                    Anything in brackets becomes a graphic cue — e.g.{" "}
-                                    <span className="cw-pill cw-pill-mono">[ON SCREEN: your line]</span>{" "}
-                                    or <span className="cw-pill cw-pill-mono">[SCREEN RECORDING: description]</span>.
-                                    They appear in the margin in preview.
-                                </p>
-                            </div>
-                        ) : (
-                            <div className="cw-body" onClick={() => setBodyEditing(true)}>
-                                {bodyBlocks.flatMap((block, bi) => {
-                                    if (block.kind === "directive") {
-                                        return [(
-                                            <div key={`${bi}-d`} className="cw-block cw-block-directive">
-                                                <OnscreenPill label={block.label} text={block.text} />
-                                            </div>
-                                        )];
-                                    }
-                                    // Split para tokens at directive boundaries so each pill gets its own row
-                                    const rows: JSX.Element[] = [];
-                                    let textBuf = "";
-                                    let rowIdx = 0;
-                                    for (const token of block.tokens) {
-                                        if (token.type === "directive") {
-                                            if (textBuf.trim()) {
-                                                rows.push(<p key={`${bi}-t${rowIdx++}`} className="cw-block cw-block-para">{textBuf}</p>);
-                                                textBuf = "";
-                                            }
-                                            rows.push(
-                                                <div key={`${bi}-d${rowIdx++}`} className="cw-block cw-block-directive">
-                                                    <OnscreenPill label={token.label} text={token.text} />
-                                                </div>
-                                            );
-                                        } else {
-                                            textBuf += token.text;
-                                        }
-                                    }
-                                    if (textBuf.trim()) {
-                                        rows.push(<p key={`${bi}-t${rowIdx++}`} className="cw-block cw-block-para">{textBuf}</p>);
-                                    }
-                                    return rows;
-                                })}
-                            </div>
-                        )}
+                        <ScriptLines
+                            scriptId={data.id}
+                            initialLines={data.lines}
+                            onStats={handleStats}
+                        />
                     </section>
 
                     {/* Doc footer */}

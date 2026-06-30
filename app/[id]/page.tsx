@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 export const dynamic = "force-dynamic";
-import { scripts, intros, contextItems, scriptImages, scriptFeedback } from "@/db/schema";
+import { scripts, intros, contextItems, scriptImages, scriptFeedback, scriptLines, lineNotes } from "@/db/schema";
 import { eq, asc, desc } from "drizzle-orm";
 import Editor from "@/components/Editor";
 import { notFound } from "next/navigation";
@@ -37,6 +37,40 @@ export default async function ScriptPage({ params }: { params: Promise<{ id: str
         orderBy: asc(scriptFeedback.roundNumber),
     });
 
+    // Line-by-line body (decision #118). Lines ordered by numeric position;
+    // notes grouped per line, oldest first.
+    const lineRows = await db.query.scriptLines.findMany({
+        where: eq(scriptLines.scriptId, id),
+        orderBy: asc(scriptLines.position),
+    });
+
+    const noteRows = await db.query.lineNotes.findMany({
+        where: eq(lineNotes.scriptId, id),
+        orderBy: asc(lineNotes.createdAt),
+    });
+
+    const notesByLine = new Map<string, typeof noteRows>();
+    for (const n of noteRows) {
+        const arr = notesByLine.get(n.lineId) ?? [];
+        arr.push(n);
+        notesByLine.set(n.lineId, arr);
+    }
+
+    const lines = lineRows.map((l) => ({
+        id: l.id,
+        position: Number(l.position),
+        say: l.say ?? "",
+        onScreen: l.onScreen ?? "",
+        rationale: l.rationale ?? "",
+        notes: (notesByLine.get(l.id) ?? []).map((n) => ({
+            id: n.id,
+            author: (n.author === "ai" ? "ai" : "human") as "ai" | "human",
+            content: n.content,
+            addressedAt: n.addressedAt ? n.addressedAt.toISOString() : null,
+            createdAt: n.createdAt.toISOString(),
+        })),
+    }));
+
     return (
         <>
             <Toaster position="top-center" />
@@ -44,7 +78,7 @@ export default async function ScriptPage({ params }: { params: Promise<{ id: str
                 initialData={{
                     id: script.id,
                     title: script.title,
-                    body: script.body || "",
+                    lines,
                     status: script.status as any, // Cast to match interface in Editor
                     editStatus: script.editStatus as "idle" | "needs_ai_edit" | "ai_editing",
                     editClaimedAt: script.editClaimedAt,

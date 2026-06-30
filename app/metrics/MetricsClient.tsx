@@ -70,6 +70,7 @@ export function MetricsClient({ rows }: { rows: ReelRow[] }) {
   // optimistic overrides for inline-edited follows
   const [followEdits, setFollowEdits] = useState<Record<number, number | null>>({});
   const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [copiedIdNum, setCopiedIdNum] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
@@ -79,6 +80,16 @@ export function MetricsClient({ rows }: { rows: ReelRow[] }) {
     setCopiedId(r.id);
     setTimeout(() => setCopiedId((c) => (c === r.id ? null : c)), 1600);
     setToast("Copied — paste into plan-post reel-repurpose");
+    setTimeout(() => setToast(null), 1800);
+  }, []);
+
+  // Copy the INTERNAL content_writer id (instagram_metrics.id) — the key Angus
+  // pastes into skill triggers / lookups. Raw number, nothing else.
+  const copyId = useCallback(async (id: number) => {
+    try { await navigator.clipboard.writeText(String(id)); } catch { /* ignore */ }
+    setCopiedIdNum(id);
+    setTimeout(() => setCopiedIdNum((c) => (c === id ? null : c)), 1600);
+    setToast(`ID ${id} copied`);
     setTimeout(() => setToast(null), 1800);
   }, []);
 
@@ -301,13 +312,32 @@ export function MetricsClient({ rows }: { rows: ReelRow[] }) {
                 <td className="m-cell m-cell--num">{num(r.saves)}</td>
                 <td className="m-cell m-cell--num">{num(r.shares)}</td>
                 <td className="m-cell m-cell--actions">
-                  <button
-                    className={"m-copybtn" + (copiedId === r.id ? " m-copybtn--ok" : "")}
-                    title="Copy reel for plan-post reel-repurpose"
-                    onClick={() => copyRepurpose(r)}
-                  >
-                    {copiedId === r.id ? "Copied ✓" : "Repurpose"}
-                  </button>
+                  <div className="m-actions">
+                    <button
+                      className={"m-idbtn" + (copiedIdNum === r.id ? " m-idbtn--ok" : "")}
+                      title={`Copy internal id (${r.id})`}
+                      onClick={() => copyId(r.id)}
+                    >
+                      {copiedIdNum === r.id ? (
+                        "Copied ✓"
+                      ) : (
+                        <>
+                          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                            <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
+                            <path d="M3 10.5 H2.5 A1 1 0 0 1 1.5 9.5 V2.5 A1 1 0 0 1 2.5 1.5 H9.5 A1 1 0 0 1 10.5 2.5 V3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                          </svg>
+                          <span className="m-idbtn__num">{r.id}</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      className={"m-copybtn" + (copiedId === r.id ? " m-copybtn--ok" : "")}
+                      title="Copy reel for plan-post reel-repurpose"
+                      onClick={() => copyRepurpose(r)}
+                    >
+                      {copiedId === r.id ? "Copied ✓" : "Repurpose"}
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

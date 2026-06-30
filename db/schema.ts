@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, integer, json, jsonb, index, boolean, bigint, date } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, json, jsonb, index, boolean, bigint, date, numeric } from "drizzle-orm/pg-core";
 
 export const scripts = pgTable("scripts", {
     id: uuid("id").defaultRandom().primaryKey(),
@@ -20,6 +20,38 @@ export const intros = pgTable("intros", {
     titleHook: text("title_hook").default(""),
     verbalIntro: text("verbal_intro").default(""),
     createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Per decision #118: the script body is a list of lines, not one flat textarea.
+// One row per line; `position` is numeric so a line can be inserted between two
+// others without renumbering. Replaces scripts.body as the source of truth.
+export const scriptLines = pgTable("script_lines", {
+    id: uuid("id").defaultRandom().primaryKey(),
+    scriptId: uuid("script_id")
+        .references(() => scripts.id, { onDelete: "cascade" })
+        .notNull(),
+    position: numeric("position").notNull(),
+    say: text("say"),
+    onScreen: text("on_screen"),
+    rationale: text("rationale"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Threaded per-line feedback. `author` is 'human' | 'ai'; an unaddressed 'ai'
+// note is a cut/rewrite recommendation surfaced prominently in the editor.
+export const lineNotes = pgTable("line_notes", {
+    id: uuid("id").defaultRandom().primaryKey(),
+    lineId: uuid("line_id")
+        .references(() => scriptLines.id, { onDelete: "cascade" })
+        .notNull(),
+    scriptId: uuid("script_id")
+        .references(() => scripts.id, { onDelete: "cascade" })
+        .notNull(),
+    author: text("author").notNull(),
+    content: text("content").notNull(),
+    addressedAt: timestamp("addressed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const contextItems = pgTable("context_items", {
