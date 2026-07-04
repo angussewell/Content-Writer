@@ -305,18 +305,19 @@ export function IdeasClient({
             const date = formatDate(idea.created_at);
             const sid = shortId(idea.id);
             const isCopied = copiedId === idea.id;
+            const open = () => router.push(`/ideas/${idea.id}`);
             return (
               <article
                 key={idea.id}
                 className="slip"
                 data-status={status}
-                onClick={() => copyVideoPrompt(idea)}
+                onClick={open}
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    copyVideoPrompt(idea);
+                    open();
                   }
                 }}
               >
@@ -392,6 +393,12 @@ export function IdeasClient({
                     </button>
                   )}
                 </div>
+
+                <span className="slip__chev" aria-hidden="true">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path d="M5 3 L9 7 L5 11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </span>
               </article>
             );
           })}

@@ -182,7 +182,7 @@ export default async function IdeasPage({
             <p className="pagehead__sub">
               {isYoutube
                 ? "Traction-validated reaction concepts. Skim the queue, open one to see the full brief, then send it to reaction prep. Posted and archived stay out of the way until you ask for them."
-                : "Voice memos from the field, fresh off Telegram. Skim, copy the ones that spark, archive the rest. Your favourite gets piped straight to the script agent."}
+                : "Voice memos from the field, fresh off Telegram. Tap one to open it as a note — read it, rework it, grow it. Copy the ones that spark, archive the rest."}
             </p>
           </div>
 

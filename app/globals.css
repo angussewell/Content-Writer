@@ -1512,6 +1512,8 @@ body::before {
 }
 .slip:hover .slip__actions,
 .slip:focus-within .slip__actions { opacity: 1; }
+/* opens-a-note affordance; desktop already signals via hover, so mobile-only */
+.slip__chev { display: none; color: var(--ink-4); }
 .slip[data-status="recorded"] .slip__transcript { color: var(--ink-2); }
 .slip[data-status="archived"] .slip__transcript { color: var(--ink-3); }
 .slip[data-status="archived"] .slip__date { color: var(--ink-3); }
@@ -1562,6 +1564,10 @@ body::before {
 .yt-stage--archived .yt-stage__dot { background: var(--ink-4); }
 .yt-stage--idea    { color: var(--accent-ink); border-color: color-mix(in oklab, var(--accent) 24%, var(--hairline)); }
 .yt-stage--archived { color: var(--ink-4); }
+/* video-idea statuses reuse the same pill */
+.yt-stage--fresh    .yt-stage__dot { background: var(--accent); }
+.yt-stage--fresh    { color: var(--accent-ink); border-color: color-mix(in oklab, var(--accent) 24%, var(--hairline)); }
+.yt-stage--recorded .yt-stage__dot { background: #6b8a5a; }
 
 /* ===== YouTube concept list ===== */
 .yt-list { display: flex; flex-direction: column; }
@@ -1866,6 +1872,14 @@ body::before {
   tab-size: 2;
 }
 .notes__empty { color: var(--ink-4); font-style: italic; }
+
+/* idea note: edit in the same voice as the rendered read view, so
+   tapping into the text feels like one continuous document */
+.notes__ta--idea {
+  font-family: var(--sans); font-size: 16px; line-height: 1.74;
+  letter-spacing: normal;
+}
+.notes__read--idea { min-height: 220px; padding-bottom: 48px; }
 
 /* full-bleed expand to side-by-side editor on wide screens */
 @media (min-width: 1040px) {
@@ -2613,6 +2627,27 @@ body::before {
   .cw-kbd { display: none; }                 /* no ⌘S hint on touch */
   .cw-save { padding: 8px 14px; margin-left: 2px; white-space: nowrap; }
   .cw-back { padding: 6px 6px; }
+
+  /* — Ideas board: slips become tappable note cards (#2075) — */
+  .slip { grid-template-columns: 1fr; gap: 10px; padding: 18px 26px 18px 4px; }
+  .slip__aside {
+    flex-direction: row; align-items: baseline; gap: 10px;
+    border-right: none; padding-right: 0;
+  }
+  .slip__id { margin-top: 0; margin-left: auto; }
+  .slip__actions { grid-column: 1; justify-content: flex-start; opacity: 1; gap: 8px; }
+  .slip .action { padding: 8px 12px; }       /* comfortable tap targets */
+  .slip .action--icon { padding: 8px; }
+  .slip__chev {
+    display: inline-flex; position: absolute;
+    right: 4px; top: 50%; transform: translateY(-50%);
+  }
+
+  /* — Idea / concept note screens — */
+  .ytd { padding: 24px 0 90px; }
+  .ytd2-head { padding-bottom: 20px; }
+  .notes__ta { font-size: 16px; }            /* <16px makes iOS zoom the viewport on focus */
+  .notes__read--idea { min-height: 45vh; }   /* tap anywhere below the text to start writing */
 }
 
 @media (max-width: 420px) {

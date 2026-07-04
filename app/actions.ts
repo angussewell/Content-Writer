@@ -454,6 +454,17 @@ export async function restoreVideoIdea(id: string) {
     return { success: true };
 }
 
+export async function updateVideoIdeaTranscript(id: string, transcript: string) {
+    await db.execute(sql`
+        UPDATE video_ideas
+        SET transcript = ${transcript}, updated_at = now()
+        WHERE id = ${id}::uuid
+    `);
+    revalidatePath(`/ideas/${id}`);
+    revalidatePath("/ideas");
+    return { success: true };
+}
+
 export async function spikeBuzzStory(id: number) {
     await db.execute(sql`
         UPDATE buzz_stories SET surfaced = true WHERE id = ${id}
