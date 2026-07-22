@@ -114,6 +114,18 @@ function renderList(items: ListItem[], ordered: boolean): React.ReactNode {
   );
 }
 
+// Render each line on its own line: a single line break the user typed shows
+// as a <br> instead of being collapsed to a space. Keeps small line breaks
+// clear on screen and intact when the note is selected and copied.
+function withBreaks(lines: string[]): React.ReactNode[] {
+  const nodes: React.ReactNode[] = [];
+  lines.forEach((ln, idx) => {
+    if (idx > 0) nodes.push(<br key={k()} />);
+    nodes.push(...inline(ln));
+  });
+  return nodes;
+}
+
 export function Markdown({ text }: { text: string }) {
   keySeed = 0;
   const lines = text.replace(/\r\n/g, "\n").split("\n");
@@ -126,7 +138,7 @@ export function Markdown({ text }: { text: string }) {
     if (para.length === 0) return;
     out.push(
       <p key={k()} className="md-p">
-        {inline(para.join(" "))}
+        {withBreaks(para)}
       </p>,
     );
     para = [];
@@ -195,7 +207,7 @@ export function Markdown({ text }: { text: string }) {
       }
       out.push(
         <blockquote key={k()} className="md-quote">
-          {inline(buf.join(" "))}
+          {withBreaks(buf)}
         </blockquote>,
       );
       continue;
