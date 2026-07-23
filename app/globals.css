@@ -186,6 +186,13 @@ body::before {
 .chip--on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 .chip--on .chip__dot { background: var(--accent); }
 .chip--ghost { cursor: default; color: var(--ink-4); border-style: dashed; }
+.chip { text-decoration: none; }
+.chip--attached { height: 28px; padding: 0 11px; }
+.chip__count {
+  font-family: var(--mono); font-size: 10.5px; color: var(--ink-4);
+  font-variant-numeric: tabular-nums; margin-left: 1px;
+}
+.chip--on .chip__count { color: rgba(255, 255, 255, 0.72); }
 .sortpill {
   appearance: none; cursor: pointer; background: transparent; border: none;
   color: var(--ink-4); font: inherit; font-size: 12.5px; font-weight: 500;

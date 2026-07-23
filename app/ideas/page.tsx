@@ -31,7 +31,7 @@ type YoutubeIdeaRow = {
   created_at: string;
 };
 
-type Counts = { fresh: number; recorded: number; archived: number; total: number };
+type Counts = { fresh: number; fresh_unworked: number; recorded: number; archived: number; total: number };
 type YtCounts = { queue: number; posted: number; archived: number; total: number };
 
 const YT_STATUSES = ["queue", "posted", "archived", "all"];
@@ -49,24 +49,33 @@ function isDefaultStatus(dataset: string, status: string) {
 export default async function IdeasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; q?: string; sort?: string; dataset?: string }>;
+  searchParams: Promise<{ status?: string; q?: string; sort?: string; dataset?: string; attached?: string }>;
 }) {
   const sp = await searchParams;
   const dataset = sp.dataset === "youtube" ? "youtube" : "video";
   const q = sp.q ?? "";
   const sort = sp.sort === "oldest" ? "oldest" : "recent";
   const status = normStatus(dataset, sp.status ?? "");
+  // Short ideas with a script/video attached are hidden by default (issue #2792);
+  // "attached=show" reveals them. An idea counts as attached once a script is
+  // linked (script_id) or it is flagged recorded — the visible scr_XXXX chip.
+  const attached = sp.attached === "show" ? "show" : "hide";
 
   // ---- Short-idea (video) counts ----
   const countsResult = await db.execute(sql`
     SELECT
       COUNT(*) FILTER (WHERE recorded = false AND (ideation_status IS NULL OR ideation_status != 'archived'))::int AS fresh,
+      COUNT(*) FILTER (WHERE recorded = false AND (ideation_status IS NULL OR ideation_status != 'archived') AND script_id IS NULL)::int AS fresh_unworked,
       COUNT(*) FILTER (WHERE recorded = true)::int AS recorded,
       COUNT(*) FILTER (WHERE ideation_status = 'archived')::int AS archived,
       COUNT(*)::int AS total
     FROM video_ideas
-  `).catch(() => ({ rows: [{ fresh: 0, recorded: 0, archived: 0, total: 0 }] }));
+  `).catch(() => ({ rows: [{ fresh: 0, fresh_unworked: 0, recorded: 0, archived: 0, total: 0 }] }));
   const counts = countsResult.rows[0] as Counts;
+  // How many fresh ideas are hidden by the default attached filter, and the
+  // count the Fresh view actually shows given the current toggle state.
+  const freshHidden = counts.fresh - counts.fresh_unworked;
+  const freshShown = attached === "show" ? counts.fresh : counts.fresh_unworked;
 
   // ---- YouTube-concept counts ----
   const ytCountsResult = await db.execute(sql`
@@ -107,12 +116,16 @@ export default async function IdeasPage({
       : status === "archived"
       ? sql`WHERE ideation_status = 'archived'`
       : sql`WHERE TRUE`;
+  // Default-hide ideas with a video attached in the Fresh inbox (issue #2792).
+  const vAttachedSql =
+    status === "fresh" && attached === "hide" ? sql`AND script_id IS NULL` : sql``;
 
   const videoIdeasResult = dataset === "video"
     ? await db.execute(sql`
         SELECT id::text AS id, transcript, recorded, ideation_status, created_at, script_id::text AS script_id
         FROM video_ideas
         ${vStatusSql}
+        ${vAttachedSql}
         ${vQSql}
         ${orderSql}
         LIMIT 200
@@ -147,7 +160,7 @@ export default async function IdeasPage({
   const youtubeIdeas = youtubeIdeasResult.rows as YoutubeIdeaRow[];
 
   const buildHref = (overrides: Record<string, string | undefined>) => {
-    const merged = { status, q, sort, dataset, ...overrides };
+    const merged = { status, q, sort, dataset, attached, ...overrides };
     const ds = merged.dataset || "video";
     const st = normStatus(ds, merged.status || "");
     const params = new URLSearchParams();
@@ -155,6 +168,8 @@ export default async function IdeasPage({
     if (!isDefaultStatus(ds, st)) params.set("status", st);
     if (merged.q) params.set("q", merged.q);
     if (merged.sort && merged.sort !== "recent") params.set("sort", merged.sort);
+    // "attached" only applies to the short-ideas (video) list.
+    if (ds === "video" && merged.attached === "show") params.set("attached", "show");
     const qs = params.toString();
     return qs ? `/ideas?${qs}` : "/ideas";
   };
@@ -164,7 +179,7 @@ export default async function IdeasPage({
   return (
     <>
       <Topbar
-        ideasCount={counts.fresh}
+        ideasCount={counts.fresh_unworked}
         metricsCount={metricsCount}
         activeTab="ideas"
         workspaceTabs={[
@@ -221,7 +236,7 @@ export default async function IdeasPage({
                     href={buildHref({ status: "fresh" })}
                     className={"segmented__btn segmented__btn--fresh" + (status === "fresh" ? " segmented__btn--on" : "")}
                   >
-                    <span className="segmented__dot" /> Fresh <span className="seg-count">{counts.fresh}</span>
+                    <span className="segmented__dot" /> Fresh <span className="seg-count">{freshShown}</span>
                   </Link>
                   <Link
                     href={buildHref({ status: "recorded" })}
@@ -259,6 +274,7 @@ export default async function IdeasPage({
               {!isDefaultStatus(dataset, status) && <input type="hidden" name="status" value={status} />}
               {sort !== "recent" && <input type="hidden" name="sort" value={sort} />}
               {dataset !== "video" && <input type="hidden" name="dataset" value={dataset} />}
+              {dataset === "video" && attached === "show" && <input type="hidden" name="attached" value="show" />}
             </form>
 
             <span className="filterrow__spacer" />
@@ -276,6 +292,35 @@ export default async function IdeasPage({
             >
               Oldest
             </Link>
+
+            {!isYoutube && status === "fresh" && (freshHidden > 0 || attached === "show") && (
+              <Link
+                href={buildHref({ attached: attached === "hide" ? "show" : "hide" })}
+                className={"chip chip--attached" + (attached === "show" ? " chip--on" : "")}
+                title={
+                  attached === "hide"
+                    ? "Show ideas that already have a video attached"
+                    : "Hide ideas that already have a video attached"
+                }
+              >
+                {attached === "hide" ? (
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M2 8s2.4-4 6-4 6 4 6 4-2.4 4-6 4-6-4-6-4Z" stroke="currentColor" strokeWidth="1.3" />
+                    <circle cx="8" cy="8" r="1.7" stroke="currentColor" strokeWidth="1.3" />
+                    <path d="M3 13 13 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                  </svg>
+                ) : (
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M2 8s2.4-4 6-4 6 4 6 4-2.4 4-6 4-6-4-6-4Z" stroke="currentColor" strokeWidth="1.3" />
+                    <circle cx="8" cy="8" r="1.7" stroke="currentColor" strokeWidth="1.3" />
+                  </svg>
+                )}
+                {attached === "hide" ? "Show attached" : "Hide attached"}
+                {attached === "hide" && freshHidden > 0 && (
+                  <span className="chip__count">{freshHidden}</span>
+                )}
+              </Link>
+            )}
           </div>
 
           <div className="collection-head">
@@ -286,7 +331,7 @@ export default async function IdeasPage({
               >
                 Short ideas
               </Link>
-              <span className="dataset__count">{counts.fresh}</span>
+              <span className="dataset__count">{freshShown}</span>
               <span className="dataset__sep" />
               <Link
                 href={buildHref({ dataset: "youtube" })}
@@ -306,7 +351,7 @@ export default async function IdeasPage({
             <span className="footer__txt">
               {isYoutube
                 ? `${ytCounts.queue} in the queue · ${ytCounts.posted} posted · ${ytCounts.archived} archived`
-                : `${counts.fresh} fresh idea${counts.fresh === 1 ? "" : "s"} waiting · ${counts.recorded} recorded · ${counts.archived} archived`}
+                : `${counts.fresh_unworked} unworked idea${counts.fresh_unworked === 1 ? "" : "s"} waiting · ${freshHidden} with a video attached · ${counts.archived} archived`}
             </span>
           </footer>
         </div>
