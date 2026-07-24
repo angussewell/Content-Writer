@@ -540,6 +540,176 @@ export async function updateYoutubeStage(id: string, stage: string) {
     return { success: true };
 }
 
+// ── YouTube film sections (issue #2790: sectioned script model) ───────────
+// One row per beat/section of a long-form YouTube video, keyed to
+// youtube_ideas.id. position is UNIQUE per concept, so every structural
+// change (insert-between, reorder) runs in a transaction and parks rows on
+// negative positions first — negatives never collide with real positions.
+
+type FilmSectionRow = {
+    id: string;
+    position: number;
+    label: string;
+    intent: string | null;
+    planned_beats: string | null;
+    target_seconds: number | null;
+    on_screen: string | null;
+    say: string | null;
+    retention_device: string | null;
+    status: string;
+    filmed_note: string | null;
+    filmed_at: string | null;
+};
+
+function revalidateFilmScript(ideaId: string) {
+    revalidatePath("/youtube");
+    revalidatePath(`/youtube/${ideaId}`);
+}
+
+// Add a section. With no `afterSectionId` it appends (position = max+1); with
+// one, it opens a gap by parking every later section on -(position+1),
+// inserting at p+1, then flipping the parked rows back to their shifted spot.
+export async function addFilmSection(ideaId: string, afterSectionId?: string | null) {
+    let row: FilmSectionRow | undefined;
+    await db.transaction(async (tx) => {
+        if (afterSectionId) {
+            const aft = await tx.execute(sql`
+                SELECT position FROM youtube_film_sections
+                WHERE id = ${afterSectionId}::uuid AND youtube_idea_id = ${ideaId}::uuid
+            `);
+            const p = aft.rows[0] ? Number((aft.rows[0] as { position: number }).position) : null;
+            if (p === null) {
+                afterSectionId = null;
+            } else {
+                await tx.execute(sql`
+                    UPDATE youtube_film_sections SET position = -(position + 1)
+                    WHERE youtube_idea_id = ${ideaId}::uuid AND position > ${p}
+                `);
+                const ins = await tx.execute(sql`
+                    INSERT INTO youtube_film_sections (youtube_idea_id, position, label)
+                    VALUES (${ideaId}::uuid, ${p + 1}, '')
+                    RETURNING id, position, label, intent, planned_beats, target_seconds,
+                              on_screen, say, retention_device, status, filmed_note, filmed_at
+                `);
+                await tx.execute(sql`
+                    UPDATE youtube_film_sections SET position = -position
+                    WHERE youtube_idea_id = ${ideaId}::uuid AND position < 0
+                `);
+                row = ins.rows[0] as FilmSectionRow;
+            }
+        }
+        if (!afterSectionId) {
+            const ins = await tx.execute(sql`
+                INSERT INTO youtube_film_sections (youtube_idea_id, position, label)
+                SELECT ${ideaId}::uuid, COALESCE(MAX(position), 0) + 1, ''
+                FROM youtube_film_sections WHERE youtube_idea_id = ${ideaId}::uuid
+                RETURNING id, position, label, intent, planned_beats, target_seconds,
+                          on_screen, say, retention_device, status, filmed_note, filmed_at
+            `);
+            row = ins.rows[0] as FilmSectionRow;
+        }
+    });
+    if (!row) return { error: "Couldn't add section" };
+    revalidateFilmScript(ideaId);
+    return { success: true, section: { ...row, position: Number(row.position) } };
+}
+
+const EDITABLE_SECTION_FIELDS = new Set([
+    "label", "intent", "planned_beats", "on_screen", "say", "retention_device", "filmed_note",
+]);
+
+export async function updateFilmSectionField(
+    sectionId: string,
+    ideaId: string,
+    field: "label" | "intent" | "planned_beats" | "on_screen" | "say" | "retention_device" | "filmed_note",
+    value: string
+) {
+    if (!EDITABLE_SECTION_FIELDS.has(field)) return { error: "Field not editable" };
+    // `field` is validated against the whitelist above, so sql.raw is safe here.
+    await db.execute(sql`
+        UPDATE youtube_film_sections
+        SET ${sql.raw(field)} = ${value}, updated_at = now()
+        WHERE id = ${sectionId}::uuid AND youtube_idea_id = ${ideaId}::uuid
+    `);
+    revalidateFilmScript(ideaId);
+    return { success: true };
+}
+
+export async function updateFilmSectionSeconds(sectionId: string, ideaId: string, seconds: number | null) {
+    const clean = seconds === null || !Number.isFinite(seconds) ? null : Math.max(0, Math.round(seconds));
+    await db.execute(sql`
+        UPDATE youtube_film_sections
+        SET target_seconds = ${clean}, updated_at = now()
+        WHERE id = ${sectionId}::uuid AND youtube_idea_id = ${ideaId}::uuid
+    `);
+    revalidateFilmScript(ideaId);
+    return { success: true, seconds: clean };
+}
+
+export async function setFilmSectionFilmed(sectionId: string, ideaId: string, filmed: boolean) {
+    await db.execute(sql`
+        UPDATE youtube_film_sections
+        SET status = ${filmed ? "filmed" : "unfilmed"},
+            filmed_at = ${filmed ? sql`now()` : sql`NULL`},
+            updated_at = now()
+        WHERE id = ${sectionId}::uuid AND youtube_idea_id = ${ideaId}::uuid
+    `);
+    revalidateFilmScript(ideaId);
+    return { success: true };
+}
+
+// Swap a section with its neighbor. Positions are read inside the
+// transaction (never trusted from the client) and the move goes through a
+// temporary -1 so the UNIQUE (youtube_idea_id, position) never trips.
+export async function moveFilmSection(sectionId: string, ideaId: string, dir: "up" | "down") {
+    let moved = false;
+    await db.transaction(async (tx) => {
+        const cur = await tx.execute(sql`
+            SELECT position FROM youtube_film_sections
+            WHERE id = ${sectionId}::uuid AND youtube_idea_id = ${ideaId}::uuid
+        `);
+        if (!cur.rows[0]) return;
+        const p = Number((cur.rows[0] as { position: number }).position);
+        const neighbor = await tx.execute(
+            dir === "up"
+                ? sql`SELECT id, position FROM youtube_film_sections
+                      WHERE youtube_idea_id = ${ideaId}::uuid AND position < ${p}
+                      ORDER BY position DESC LIMIT 1`
+                : sql`SELECT id, position FROM youtube_film_sections
+                      WHERE youtube_idea_id = ${ideaId}::uuid AND position > ${p}
+                      ORDER BY position ASC LIMIT 1`
+        );
+        if (!neighbor.rows[0]) return;
+        const n = neighbor.rows[0] as { id: string; position: number };
+        const np = Number(n.position);
+        await tx.execute(sql`
+            UPDATE youtube_film_sections SET position = -1
+            WHERE id = ${sectionId}::uuid AND youtube_idea_id = ${ideaId}::uuid
+        `);
+        await tx.execute(sql`
+            UPDATE youtube_film_sections SET position = ${p}, updated_at = now()
+            WHERE id = ${n.id}::uuid AND youtube_idea_id = ${ideaId}::uuid
+        `);
+        await tx.execute(sql`
+            UPDATE youtube_film_sections SET position = ${np}, updated_at = now()
+            WHERE id = ${sectionId}::uuid AND youtube_idea_id = ${ideaId}::uuid
+        `);
+        moved = true;
+    });
+    if (moved) revalidateFilmScript(ideaId);
+    return { success: moved };
+}
+
+export async function deleteFilmSection(sectionId: string, ideaId: string) {
+    // Positions may keep gaps after a delete — ORDER BY position still holds.
+    await db.execute(sql`
+        DELETE FROM youtube_film_sections
+        WHERE id = ${sectionId}::uuid AND youtube_idea_id = ${ideaId}::uuid
+    `);
+    revalidateFilmScript(ideaId);
+    return { success: true };
+}
+
 // ── Metrics (posted reels) ───────────────────────────────────────────────
 
 // Whitelist of inline-editable instagram_metrics columns + their coercion type.

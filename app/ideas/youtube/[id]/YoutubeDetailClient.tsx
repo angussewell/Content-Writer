@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useTransition, useCallback } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import TextareaAutosize from "react-textarea-autosize";
 import {
@@ -289,6 +290,13 @@ function DocHeader({
             </>
           )}
         </button>
+        <Link href={`/youtube/${id}`} className="ytd-archive ytd-script">
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+            <rect x="1.5" y="3" width="11" height="8" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
+            <path d="M4 3 V11 M10 3 V11" stroke="currentColor" strokeWidth="1.1" />
+          </svg>
+          <span>Film script</span>
+        </Link>
         <button className="ytd-archive" onClick={toggleArchive}>
           {archived ? (
             <>

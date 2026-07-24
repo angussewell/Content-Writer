@@ -5,12 +5,14 @@ type Tab = { id: string; label: string; count: number | string; href: string };
 
 export function Topbar({
   ideasCount,
+  youtubeCount,
   wireCount,
   metricsCount,
   workspaceTabs,
   activeTab,
 }: {
   ideasCount: number;
+  youtubeCount?: number;
   wireCount?: number;
   metricsCount?: number;
   workspaceTabs: Tab[];
@@ -37,6 +39,13 @@ export function Topbar({
           >
             <span className="tab__label">Ideas</span>
             <span className="tab__count">{ideasCount}</span>
+          </Link>
+          <Link
+            href="/youtube"
+            className={"tab " + (activeTab === "youtube" ? "tab--active" : "")}
+          >
+            <span className="tab__label">YouTube</span>
+            {typeof youtubeCount === "number" && <span className="tab__count">{youtubeCount}</span>}
           </Link>
           <Link
             href="/wire"
