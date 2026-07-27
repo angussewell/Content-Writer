@@ -23,8 +23,9 @@ export const intros = pgTable("intros", {
 });
 
 // Per decision #118: the script body is a list of lines, not one flat textarea.
-// One row per line; `position` is numeric so a line can be inserted between two
-// others without renumbering. Replaces scripts.body as the source of truth.
+// One row per line. Structural edits normalize `position` to consecutive
+// integers so displayed order and persisted order always agree. Replaces
+// scripts.body as the source of truth.
 export const scriptLines = pgTable("script_lines", {
     id: uuid("id").defaultRandom().primaryKey(),
     scriptId: uuid("script_id")

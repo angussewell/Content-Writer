@@ -545,6 +545,10 @@ body::before {
 }
 .cw-section-add:hover { color: var(--ink); border-color: var(--ink-3); background: var(--paper-2); }
 .cw-section-add.is-active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.cw-section-add--bottom {
+  width: 100%; min-height: 44px; justify-content: center;
+  margin-top: 14px; border-style: dashed;
+}
 
 /* ── Intros (v2) ── */
 .cw-intros { display: flex; flex-direction: column; }
@@ -762,8 +766,9 @@ body::before {
 }
 
 .cw-line {
-  display: grid; grid-template-columns: 40px 1fr 36px;
+  display: grid; grid-template-columns: 40px 1fr;
   gap: 14px; padding: 18px 0; position: relative;
+  scroll-margin-top: 80px;
 }
 .cw-line + .cw-line { border-top: 1px solid var(--rule-2); }
 /* A line carrying an unaddressed AI note gets an accent spine. */
@@ -800,7 +805,7 @@ body::before {
 .cw-line__onscreen::placeholder, .cw-line__rationale::placeholder { color: var(--ink-4); font-style: normal; }
 .cw-line__say:focus, .cw-line__onscreen:focus, .cw-line__rationale:focus { caret-color: var(--accent); }
 
-.cw-line__notesbar { margin-top: 2px; }
+.cw-line__notesbar { margin-top: 2px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .cw-line__notetoggle {
   display: inline-flex; align-items: center; gap: 6px;
   background: transparent; border: 0; cursor: pointer; padding: 3px 0;
@@ -812,6 +817,13 @@ body::before {
   font-family: var(--mono); font-size: 9px; letter-spacing: .06em;
   background: var(--accent); color: #fff; border-radius: 999px; padding: 1px 7px;
 }
+.cw-line__savestate {
+  flex-shrink: 0; font-family: var(--mono); font-size: 9px;
+  letter-spacing: .05em; color: var(--ink-4);
+}
+.cw-line__savestate.is-saving { color: var(--accent-ink); }
+.cw-line__savestate.is-error { color: #b4452e; }
+[data-theme="dark"] .cw-line__savestate.is-error { color: #e08a6f; }
 
 .cw-line__notes {
   display: flex; flex-direction: column; gap: 10px;
@@ -873,13 +885,14 @@ body::before {
 .cw-line__compose { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
 
 .cw-line__actions {
-  display: flex; flex-direction: column; gap: 4px; align-items: center; padding-top: 4px;
+  display: flex; align-items: center; gap: 4px; margin-top: 2px; min-height: 32px;
   opacity: 0; transition: opacity .15s;
 }
 .cw-line:hover .cw-line__actions, .cw-line:focus-within .cw-line__actions { opacity: 1; }
 .cw-line__act {
-  width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 6px; background: transparent; border: 0; color: var(--ink-4); cursor: pointer;
+  min-height: 32px; padding: 0 9px; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  border-radius: 7px; background: transparent; border: 1px solid var(--rule-2); color: var(--ink-4); cursor: pointer;
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .04em;
   transition: color .15s, background .15s;
 }
 .cw-line__act:hover { color: var(--accent); background: var(--accent-soft); }
@@ -895,6 +908,7 @@ body::before {
 }
 .cw-line-add:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 .cw-line-add--primary { margin-top: 16px; }
+.cw-line-add--end { width: 100%; min-height: 46px; justify-content: center; margin-top: 18px; }
 
 /* ── Doc footer ── */
 .cw-doc-foot {
@@ -929,11 +943,19 @@ body::before {
   .cw-header-row { grid-template-columns: auto 1fr; }
 
   /* Line editor: tighten the grid, stack field labels, keep actions tappable. */
-  .cw-line { grid-template-columns: 26px 1fr 30px; gap: 10px; }
+  .cw-line { grid-template-columns: 26px 1fr; gap: 10px; padding: 20px 0; }
   .cw-line__say { font-size: 17px; }
   .cw-line__field { grid-template-columns: 1fr; gap: 1px; }
   .cw-line__flabel { padding-top: 0; }
   .cw-line__actions { opacity: 1; }
+  .cw-line__act { min-height: 44px; flex: 1; padding: 0 6px; }
+  .cw-line__onscreen, .cw-line__rationale,
+  .cw-note__editta, .cw-line__composeta { font-size: 16px; }
+  .cw-section-head { flex-wrap: wrap; }
+  .cw-section-add { min-height: 44px; }
+  .cw-section-add--bottom { min-height: 48px; }
+  .cw-take-action { width: 40px; height: 40px; opacity: 1; }
+  .cw-intro { scroll-margin-top: 80px; }
 }
 
 /* ============================================================
@@ -1073,6 +1095,24 @@ body::before {
 .fb-round__body { font-family: var(--serif); font-size: 14.5px; line-height: 1.6; color: var(--ink-2); }
 .fb-round__body p { margin: 0 0 0.7em; }
 .fb-round__body p:last-child { margin-bottom: 0; }
+
+@media (max-width: 720px) {
+  /* Compact on phones so the editor remains visible beneath the dock. */
+  .fb-trigger {
+    right: 14px; bottom: max(14px, env(safe-area-inset-bottom));
+    width: 48px; height: 48px; padding: 0; gap: 0; justify-content: center;
+  }
+  .fb-trigger__label, .fb-trigger__pulse { display: none; }
+  .fb-trigger__count {
+    position: absolute; right: -3px; top: -3px;
+    min-width: 18px; height: 18px;
+  }
+  .fb-dock {
+    right: 12px; bottom: max(12px, env(safe-area-inset-bottom));
+    width: calc(100vw - 24px); max-width: none;
+    height: min(680px, calc(100dvh - 24px));
+  }
+}
 
 /* ============================================================
    ASSETS OVERLAY — fullscreen modal

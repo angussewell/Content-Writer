@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useMemo, useEffect, useCallback } from "react";
+import { useState, useTransition, useMemo, useEffect, useCallback, useRef } from "react";
 import TextareaAutosize from "react-textarea-autosize";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -104,8 +104,17 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
     const [feedbackOpen, setFeedbackOpen] = useState(false);
     const [contextOpen, setContextOpen] = useState(false);
     const [idCopied, setIdCopied] = useState(false);
+    const [metadataSaveState, setMetadataSaveState] = useState<"idle" | "dirty" | "saving" | "saved" | "error">("idle");
+    const metadataVersionRef = useRef(0);
+    const saveResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [activeSuggestion, setActiveSuggestion] = useState<{ introId: string | null; type: "hook" | "intro" | null; text: string }>({ introId: null, type: null, text: "" });
     const router = useRouter();
+
+    const markMetadataDirty = useCallback(() => {
+        metadataVersionRef.current += 1;
+        if (saveResetRef.current) clearTimeout(saveResetRef.current);
+        setMetadataSaveState("dirty");
+    }, []);
 
     // Live stats reported up from the line editor (decision #118: line-by-line body).
     const initialStats = useMemo<LineStats>(() => {
@@ -129,6 +138,37 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
     const onScreenCount = lineStats.cues;
     const openFeedbackCount = (data.feedback || []).filter((f) => !f.addressedAt).length;
 
+    const handleSave = useCallback(() => {
+        const savingVersion = metadataVersionRef.current;
+        if (saveResetRef.current) clearTimeout(saveResetRef.current);
+        setMetadataSaveState("saving");
+        startTransition(async () => {
+            try {
+                // Body is no longer sent — lines auto-save themselves (decision #118).
+                await updateScript(data.id, {
+                    title: data.title,
+                    intros: data.intros,
+                    contextItems: data.contextItems || [],
+                });
+                setData((prev) => ({
+                    ...prev,
+                    intros: prev.intros.map((intro) => intro.isNew ? { ...intro, isNew: false } : intro),
+                }));
+                if (metadataVersionRef.current === savingVersion) {
+                    setMetadataSaveState("saved");
+                    saveResetRef.current = setTimeout(() => setMetadataSaveState("idle"), 1800);
+                } else {
+                    setMetadataSaveState("dirty");
+                }
+                toast.success("Saved");
+                router.refresh();
+            } catch {
+                setMetadataSaveState("error");
+                toast.error("Failed to save");
+            }
+        });
+    }, [data, router]);
+
     // ⌘S to save
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
@@ -139,24 +179,7 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
         };
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
-    }, [data]);
-
-    const handleSave = () => {
-        startTransition(async () => {
-            try {
-                // Body is no longer sent — lines auto-save themselves (decision #118).
-                await updateScript(data.id, {
-                    title: data.title,
-                    intros: data.intros,
-                    contextItems: data.contextItems || [],
-                });
-                toast.success("Saved");
-                router.refresh();
-            } catch {
-                toast.error("Failed to save");
-            }
-        });
-    };
+    }, [handleSave]);
 
     const handleCopy = () => {
         const text = [
@@ -187,13 +210,21 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
     };
 
     const addIntro = () => {
+        const id = crypto.randomUUID();
+        markMetadataDirty();
         setData((prev) => ({
             ...prev,
-            intros: [...prev.intros, { id: crypto.randomUUID(), titleHook: "", verbalIntro: "", isNew: true }],
+            intros: [...prev.intros, { id, titleHook: "", verbalIntro: "", isNew: true }],
         }));
+        setTimeout(() => {
+            const field = document.getElementById(`intro-hook-${id}`) as HTMLTextAreaElement | null;
+            field?.focus({ preventScroll: true });
+            field?.scrollIntoView({ block: "center" });
+        }, 40);
     };
 
     const updateIntro = (id: string, field: "titleHook" | "verbalIntro", value: string) => {
+        markMetadataDirty();
         setData((prev) => ({
             ...prev,
             intros: prev.intros.map((i) => (i.id === id ? { ...i, [field]: value } : i)),
@@ -201,6 +232,7 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
     };
 
     const removeIntro = (id: string) => {
+        markMetadataDirty();
         setData((prev) => ({ ...prev, intros: prev.intros.filter((i) => i.id !== id) }));
     };
 
@@ -210,6 +242,19 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
     };
 
     const statuses = ["draft", "filmed", "done", "archived"];
+    const saveLabel = metadataSaveState === "saving"
+        ? "Saving…"
+        : metadataSaveState === "saved"
+            ? "Saved"
+            : metadataSaveState === "error"
+                ? "Retry save"
+                : metadataSaveState === "dirty"
+                    ? "Save changes"
+                    : "Save draft";
+
+    useEffect(() => () => {
+        if (saveResetRef.current) clearTimeout(saveResetRef.current);
+    }, []);
 
     return (
         <div className="cw-shell">
@@ -217,7 +262,16 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
             <header className="cw-header">
                 <div className="cw-header-row">
                     {/* Left: back */}
-                    <Link href="/" className="cw-back" aria-label="Back to library">
+                    <Link
+                        href="/"
+                        className="cw-back"
+                        aria-label="Back to library"
+                        onClick={(event) => {
+                            if (metadataSaveState === "dirty" && !window.confirm("Discard unsaved title or intro changes?")) {
+                                event.preventDefault();
+                            }
+                        }}
+                    >
                         <ArrowIcon />
                         <span>Library</span>
                     </Link>
@@ -292,9 +346,9 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                         <button
                             className="cw-save"
                             onClick={handleSave}
-                            disabled={isPending}
+                            disabled={isPending || metadataSaveState === "saving"}
                         >
-                            <span>{isPending ? "Saving…" : "Save draft"}</span>
+                            <span aria-live="polite">{saveLabel}</span>
                             <kbd className="cw-kbd">⌘S</kbd>
                         </button>
                     </div>
@@ -333,8 +387,13 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                         <TextareaAutosize
                             className="cw-title"
                             value={data.title}
-                            onChange={(e) => setData({ ...data, title: e.target.value })}
+                            onChange={(e) => {
+                                markMetadataDirty();
+                                setData({ ...data, title: e.target.value });
+                            }}
                             placeholder="Untitled script"
+                            autoCapitalize="sentences"
+                            autoCorrect="on"
                         />
                         <div className="cw-titleblock-rule">
                             <span className="cw-titleblock-byline">Reel Scripter</span>
@@ -350,8 +409,8 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                             </h2>
                             <span className="cw-section-rule" />
                             <span className="cw-section-count">{data.intros.length} take{data.intros.length === 1 ? "" : "s"}</span>
-                            <button className="cw-section-add" onClick={addIntro}>
-                                <PlusIcon /><span>New take</span>
+                            <button type="button" className="cw-section-add" onClick={addIntro}>
+                                <PlusIcon /><span>Add take</span>
                             </button>
                         </div>
 
@@ -373,10 +432,20 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                                         <div className="cw-intro-row">
                                             <span className="cw-intro-label">Hook</span>
                                             <TextareaAutosize
+                                                id={`intro-hook-${intro.id}`}
                                                 className="cw-intro-hook"
                                                 value={intro.titleHook}
                                                 onChange={(e) => updateIntro(intro.id, "titleHook", e.target.value)}
                                                 placeholder="A line that stops the scroll…"
+                                                autoCapitalize="sentences"
+                                                autoCorrect="on"
+                                                enterKeyHint="next"
+                                                onKeyDown={(event) => {
+                                                    if (event.key === "Enter" && !event.shiftKey) {
+                                                        event.preventDefault();
+                                                        document.getElementById(`intro-spoken-${intro.id}`)?.focus();
+                                                    }
+                                                }}
                                             />
                                             <button
                                                 className="cw-intro-ai"
@@ -389,10 +458,13 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                                         <div className="cw-intro-row">
                                             <span className="cw-intro-label">Spoken</span>
                                             <TextareaAutosize
+                                                id={`intro-spoken-${intro.id}`}
                                                 className="cw-intro-verbal"
                                                 value={intro.verbalIntro}
                                                 onChange={(e) => updateIntro(intro.id, "verbalIntro", e.target.value)}
                                                 placeholder="What you actually say to camera…"
+                                                autoCapitalize="sentences"
+                                                autoCorrect="on"
                                             />
                                         </div>
                                     </div>
@@ -405,6 +477,11 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                                 </div>
                             )}
                         </div>
+                        {data.intros.length > 0 && (
+                            <button type="button" className="cw-section-add cw-section-add--bottom" onClick={addIntro}>
+                                <PlusIcon /><span>Add another hook + intro</span>
+                            </button>
+                        )}
                     </section>
 
                     {/* Script lines (decision #118: line-by-line body) */}

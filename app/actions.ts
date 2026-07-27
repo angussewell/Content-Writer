@@ -127,37 +127,90 @@ type LineRow = {
     rationale: string | null;
 };
 
-// Add a line. With no `afterLineId` it appends (position = max+1). With one, it
-// inserts between that line and the next using a fractional position, so no
-// existing line has to be renumbered.
-export async function addScriptLine(scriptId: string, afterLineId?: string | null) {
-    let res;
-    if (afterLineId) {
-        res = await db.execute(sql`
-            WITH aft AS (
-                SELECT position AS p FROM script_lines WHERE id = ${afterLineId}::uuid
-            ),
-            nxt AS (
-                SELECT MIN(position) AS p FROM script_lines
-                WHERE script_id = ${scriptId}::uuid AND position > (SELECT p FROM aft)
-            )
-            INSERT INTO script_lines (script_id, position, say, on_screen, rationale)
-            SELECT ${scriptId}::uuid,
-                CASE WHEN (SELECT p FROM nxt) IS NULL
-                     THEN (SELECT p FROM aft) + 1
-                     ELSE ((SELECT p FROM aft) + (SELECT p FROM nxt)) / 2 END,
-                '', '', ''
-            RETURNING id, position, say, on_screen, rationale
-        `);
-    } else {
-        res = await db.execute(sql`
-            INSERT INTO script_lines (script_id, position, say, on_screen, rationale)
-            SELECT ${scriptId}::uuid, COALESCE(MAX(position), 0) + 1, '', '', ''
-            FROM script_lines WHERE script_id = ${scriptId}::uuid
-            RETURNING id, position, say, on_screen, rationale
-        `);
+// Structural line edits keep positions as the consecutive integers 1..N.
+// Rows are parked at unique negative positions while the gap is opened, which
+// avoids collisions with the UNIQUE (script_id, position) constraint. The
+// per-script advisory lock prevents two mobile taps from racing each other.
+export async function addScriptLine(
+    scriptId: string,
+    anchorLineId?: string | null,
+    placement: "before" | "after" | "end" = "end"
+) {
+    if (!(["before", "after", "end"] as const).includes(placement)) {
+        return { error: "Invalid insertion point" };
     }
-    const row = res.rows[0] as LineRow;
+
+    let row: LineRow | undefined;
+    let anchorMissing = false;
+
+    await db.transaction(async (tx) => {
+        await tx.execute(sql`
+            SELECT pg_advisory_xact_lock(hashtextextended(${scriptId}::text, 0))
+        `);
+
+        const countResult = await tx.execute(sql`
+            SELECT COUNT(*)::int AS count
+            FROM script_lines
+            WHERE script_id = ${scriptId}::uuid
+        `);
+        const count = Number((countResult.rows[0] as { count: number }).count);
+        let insertAt = count + 1;
+
+        if (placement !== "end") {
+            if (!anchorLineId) {
+                anchorMissing = true;
+                return;
+            }
+            const anchorResult = await tx.execute(sql`
+                SELECT ordinal FROM (
+                    SELECT id, ROW_NUMBER() OVER (ORDER BY position, id)::int AS ordinal
+                    FROM script_lines
+                    WHERE script_id = ${scriptId}::uuid
+                ) ranked
+                WHERE id = ${anchorLineId}::uuid
+            `);
+            if (!anchorResult.rows[0]) {
+                anchorMissing = true;
+                return;
+            }
+            const anchorOrdinal = Number((anchorResult.rows[0] as { ordinal: number }).ordinal);
+            insertAt = placement === "before" ? anchorOrdinal : anchorOrdinal + 1;
+        }
+
+        await tx.execute(sql`
+            WITH ranked AS (
+                SELECT id, ROW_NUMBER() OVER (ORDER BY position, id) AS ordinal
+                FROM script_lines
+                WHERE script_id = ${scriptId}::uuid
+            )
+            UPDATE script_lines AS line
+            SET position = -1000000000 - ranked.ordinal
+            FROM ranked
+            WHERE line.id = ranked.id
+        `);
+
+        const inserted = await tx.execute(sql`
+            INSERT INTO script_lines (script_id, position, say, on_screen, rationale)
+            VALUES (${scriptId}::uuid, ${insertAt}, '', '', '')
+            RETURNING id, position, say, on_screen, rationale
+        `);
+
+        await tx.execute(sql`
+            UPDATE script_lines
+            SET position = CASE
+                    WHEN (-position - 1000000000) >= ${insertAt}
+                        THEN (-position - 1000000000) + 1
+                    ELSE (-position - 1000000000)
+                END,
+                updated_at = now()
+            WHERE script_id = ${scriptId}::uuid
+              AND position < -1000000000
+        `);
+
+        row = inserted.rows[0] as LineRow;
+    });
+
+    if (anchorMissing || !row) return { error: "Insertion point no longer exists" };
     revalidatePath(`/${scriptId}`);
     return { success: true, line: { ...row, position: Number(row.position) } };
 }
@@ -182,12 +235,43 @@ export async function updateScriptLine(
 }
 
 export async function deleteScriptLine(lineId: string, scriptId: string) {
-    // line_notes cascade-delete via FK.
-    await db.execute(sql`
-        DELETE FROM script_lines WHERE id = ${lineId}::uuid AND script_id = ${scriptId}::uuid
-    `);
-    revalidatePath(`/${scriptId}`);
-    return { success: true };
+    let deleted = false;
+    await db.transaction(async (tx) => {
+        await tx.execute(sql`
+            SELECT pg_advisory_xact_lock(hashtextextended(${scriptId}::text, 0))
+        `);
+
+        // line_notes cascade-delete via FK.
+        const result = await tx.execute(sql`
+            DELETE FROM script_lines
+            WHERE id = ${lineId}::uuid AND script_id = ${scriptId}::uuid
+            RETURNING id
+        `);
+        if (!result.rows[0]) return;
+        deleted = true;
+
+        await tx.execute(sql`
+            WITH ranked AS (
+                SELECT id, ROW_NUMBER() OVER (ORDER BY position, id) AS ordinal
+                FROM script_lines
+                WHERE script_id = ${scriptId}::uuid
+            )
+            UPDATE script_lines AS line
+            SET position = -1000000000 - ranked.ordinal
+            FROM ranked
+            WHERE line.id = ranked.id
+        `);
+        await tx.execute(sql`
+            UPDATE script_lines
+            SET position = -position - 1000000000,
+                updated_at = now()
+            WHERE script_id = ${scriptId}::uuid
+              AND position < -1000000000
+        `);
+    });
+
+    if (deleted) revalidatePath(`/${scriptId}`);
+    return { success: deleted };
 }
 
 export async function addLineNote(

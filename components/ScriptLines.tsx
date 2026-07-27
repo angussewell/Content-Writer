@@ -33,6 +33,8 @@ export interface LineData {
 }
 
 type EditableField = "say" | "onScreen" | "rationale";
+type SaveState = "saving" | "saved" | "error";
+type InsertPlacement = "before" | "after";
 const DB_FIELD: Record<EditableField, "say" | "on_screen" | "rationale"> = {
     say: "say",
     onScreen: "on_screen",
@@ -165,13 +167,14 @@ interface LineRowProps {
     scriptId: string;
     onField: (lineId: string, field: EditableField, value: string) => void;
     onSaveField: (lineId: string, field: EditableField, value: string) => void;
-    onAddBelow: (lineId: string) => void;
+    onAdd: (lineId: string, placement: InsertPlacement) => void;
     onRemove: (lineId: string) => void;
     onNotesChange: (lineId: string, notes: LineNote[]) => void;
+    saveState?: SaveState;
 }
 
 const LineRow = memo(function LineRow({
-    line, index, scriptId, onField, onSaveField, onAddBelow, onRemove, onNotesChange,
+    line, index, scriptId, onField, onSaveField, onAdd, onRemove, onNotesChange, saveState,
 }: LineRowProps) {
     const unaddressedAi = line.notes.filter((n) => n.author === "ai" && !n.addressedAt).length;
     // Surface AI cut-recommendations by default: a line carrying one opens its thread.
@@ -217,6 +220,8 @@ const LineRow = memo(function LineRow({
                     onBlur={(e) => onSaveField(line.id, "say", e.target.value)}
                     placeholder="What you say to camera…"
                     minRows={1}
+                    autoCapitalize="sentences"
+                    autoCorrect="on"
                 />
 
                 <div className="cw-line__sub">
@@ -229,6 +234,8 @@ const LineRow = memo(function LineRow({
                             onBlur={(e) => onSaveField(line.id, "onScreen", e.target.value)}
                             placeholder="On-screen text or graphic cue…"
                             minRows={1}
+                            autoCapitalize="sentences"
+                            autoCorrect="on"
                         />
                     </div>
                     <div className="cw-line__field">
@@ -240,6 +247,8 @@ const LineRow = memo(function LineRow({
                             onBlur={(e) => onSaveField(line.id, "rationale", e.target.value)}
                             placeholder="Rationale — why this line earns its place…"
                             minRows={1}
+                            autoCapitalize="sentences"
+                            autoCorrect="on"
                         />
                     </div>
                 </div>
@@ -250,6 +259,9 @@ const LineRow = memo(function LineRow({
                         <span>{noteCount > 0 ? `${noteCount} note${noteCount === 1 ? "" : "s"}` : "Add note"}</span>
                         {unaddressedAi > 0 && <span className="cw-line__aiflag">{unaddressedAi} AI</span>}
                     </button>
+                    <span className={"cw-line__savestate" + (saveState ? ` is-${saveState}` : "")} aria-live="polite">
+                        {saveState === "saving" ? "Saving…" : saveState === "error" ? "Save failed" : "Auto-saved"}
+                    </span>
                 </div>
 
                 {open && (
@@ -283,15 +295,33 @@ const LineRow = memo(function LineRow({
                         </div>
                     </div>
                 )}
-            </div>
 
-            <div className="cw-line__actions">
-                <button className="cw-line__act" title="Add line below" onClick={() => onAddBelow(line.id)}>
-                    <PlusIcon />
-                </button>
-                <button className="cw-line__act cw-line__act--danger" title="Delete line" onClick={() => onRemove(line.id)}>
-                    <TrashIcon />
-                </button>
+                <div className="cw-line__actions" role="group" aria-label={`Line ${index + 1} actions`}>
+                    <button
+                        type="button"
+                        className="cw-line__act"
+                        aria-label={`Insert line above line ${index + 1}`}
+                        onClick={() => onAdd(line.id, "before")}
+                    >
+                        <PlusIcon /><span>Above</span>
+                    </button>
+                    <button
+                        type="button"
+                        className="cw-line__act"
+                        aria-label={`Insert line below line ${index + 1}`}
+                        onClick={() => onAdd(line.id, "after")}
+                    >
+                        <PlusIcon /><span>Below</span>
+                    </button>
+                    <button
+                        type="button"
+                        className="cw-line__act cw-line__act--danger"
+                        aria-label={`Delete line ${index + 1}`}
+                        onClick={() => onRemove(line.id)}
+                    >
+                        <TrashIcon /><span>Delete</span>
+                    </button>
+                </div>
             </div>
         </article>
     );
@@ -328,6 +358,10 @@ export default function ScriptLines({
     const [, start] = useTransition();
     // Last value persisted per field, so blur only writes when something changed.
     const savedRef = useRef<Record<string, string>>({});
+    const saveQueueRef = useRef<Record<string, Promise<void>>>({});
+    const saveRevisionRef = useRef<Record<string, number>>({});
+    const [fieldSaveStates, setFieldSaveStates] = useState<Record<string, SaveState>>({});
+    const saveStateTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
     useEffect(() => {
         for (const l of initialLines) {
@@ -337,6 +371,10 @@ export default function ScriptLines({
             if (!(`${k}:rationale` in savedRef.current)) savedRef.current[`${k}:rationale`] = l.rationale;
         }
     }, [initialLines]);
+
+    useEffect(() => () => {
+        Object.values(saveStateTimersRef.current).forEach(clearTimeout);
+    }, []);
 
     useEffect(() => {
         if (!onStats) return;
@@ -352,17 +390,42 @@ export default function ScriptLines({
     const saveField = useCallback((lineId: string, field: EditableField, value: string) => {
         const key = `${lineId}:${field}`;
         if (savedRef.current[key] === value) return;
-        savedRef.current[key] = value;
-        start(async () => {
+        const revision = (saveRevisionRef.current[key] ?? 0) + 1;
+        saveRevisionRef.current[key] = revision;
+        if (saveStateTimersRef.current[key]) clearTimeout(saveStateTimersRef.current[key]);
+        setFieldSaveStates((prev) => ({ ...prev, [key]: "saving" }));
+
+        const queued = (saveQueueRef.current[key] ?? Promise.resolve()).then(async () => {
             const res = await updateScriptLine(lineId, scriptId, DB_FIELD[field], value);
-            if (res?.error) toast.error(res.error);
+            if (res?.error) throw new Error(res.error);
+            savedRef.current[key] = value;
+        });
+        saveQueueRef.current[key] = queued.then(() => undefined, () => undefined);
+
+        start(async () => {
+            try {
+                await queued;
+                if (saveRevisionRef.current[key] !== revision) return;
+                setFieldSaveStates((prev) => ({ ...prev, [key]: "saved" }));
+                saveStateTimersRef.current[key] = setTimeout(() => {
+                    setFieldSaveStates((prev) => {
+                        const next = { ...prev };
+                        delete next[key];
+                        return next;
+                    });
+                }, 1400);
+            } catch (error) {
+                if (saveRevisionRef.current[key] !== revision) return;
+                setFieldSaveStates((prev) => ({ ...prev, [key]: "error" }));
+                toast.error(error instanceof Error ? error.message : "Couldn't save line");
+            }
         });
     }, [scriptId]);
 
-    const addLine = useCallback((afterLineId?: string) => {
+    const addLine = useCallback((anchorLineId?: string, placement: InsertPlacement | "end" = "end") => {
         start(async () => {
-            const res = await addScriptLine(scriptId, afterLineId ?? null);
-            if (!res?.success || !res.line) { toast.error("Couldn't add line"); return; }
+            const res = await addScriptLine(scriptId, anchorLineId ?? null, placement);
+            if (!res?.success || !res.line) { toast.error(res?.error || "Couldn't add line"); return; }
             const created = res.line;
             const nl: LineData = {
                 id: created.id, position: created.position, say: "", onScreen: "", rationale: "", notes: [],
@@ -371,22 +434,32 @@ export default function ScriptLines({
             savedRef.current[`${nl.id}:onScreen`] = "";
             savedRef.current[`${nl.id}:rationale`] = "";
             setLines((prev) => {
-                if (!afterLineId) return [...prev, nl];
-                const idx = prev.findIndex((l) => l.id === afterLineId);
-                if (idx === -1) return [...prev, nl];
+                if (!anchorLineId || placement === "end") {
+                    return [...prev, nl].map((line, index) => ({ ...line, position: index + 1 }));
+                }
+                const idx = prev.findIndex((l) => l.id === anchorLineId);
+                if (idx === -1) return prev;
                 const copy = [...prev];
-                copy.splice(idx + 1, 0, nl);
-                return copy;
+                copy.splice(placement === "before" ? idx : idx + 1, 0, nl);
+                return copy.map((line, index) => ({ ...line, position: index + 1 }));
             });
-            setTimeout(() => document.getElementById(`say-${nl.id}`)?.focus(), 40);
+            setTimeout(() => {
+                const field = document.getElementById(`say-${nl.id}`) as HTMLTextAreaElement | null;
+                field?.focus({ preventScroll: true });
+                field?.scrollIntoView({ block: "center" });
+            }, 40);
         });
     }, [scriptId]);
 
     const removeLine = useCallback((lineId: string) => {
         if (!confirm("Delete this line and its notes?")) return;
         start(async () => {
-            await deleteScriptLine(lineId, scriptId);
-            setLines((prev) => prev.filter((l) => l.id !== lineId));
+            const res = await deleteScriptLine(lineId, scriptId);
+            if (!res.success) { toast.error("Couldn't delete line"); return; }
+            setLines((prev) => prev
+                .filter((l) => l.id !== lineId)
+                .map((line, index) => ({ ...line, position: index + 1 }))
+            );
         });
     }, [scriptId]);
 
@@ -417,13 +490,22 @@ export default function ScriptLines({
                             scriptId={scriptId}
                             onField={editField}
                             onSaveField={saveField}
-                            onAddBelow={addLine}
+                            onAdd={addLine}
                             onRemove={removeLine}
                             onNotesChange={setLineNotes}
+                            saveState={(() => {
+                                const states = (["say", "onScreen", "rationale"] as EditableField[])
+                                    .map((field) => fieldSaveStates[`${line.id}:${field}`])
+                                    .filter(Boolean);
+                                if (states.includes("saving")) return "saving";
+                                if (states.includes("error")) return "error";
+                                if (states.includes("saved")) return "saved";
+                                return undefined;
+                            })()}
                         />
                     ))}
-                    <button className="cw-line-add cw-line-add--end" onClick={() => addLine()}>
-                        <PlusIcon /><span>Add line</span>
+                    <button type="button" className="cw-line-add cw-line-add--end" onClick={() => addLine()}>
+                        <PlusIcon /><span>Add line at end</span>
                     </button>
                 </>
             )}
