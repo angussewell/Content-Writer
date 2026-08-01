@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { X, Send, AlertTriangle } from "lucide-react";
 import { saveFeedback, forceReleaseEditClaim, deleteFeedback } from "@/app/actions";
 import { useRouter } from "next/navigation";
@@ -36,7 +36,21 @@ function relativeTime(date: Date): string {
 export default function FeedbackPanel({ scriptId, editStatus, editClaimedAt, feedback }: FeedbackPanelProps) {
     const [content, setContent] = useState("");
     const [isPending, startTransition] = useTransition();
+    const [isStale, setIsStale] = useState(false);
     const router = useRouter();
+
+    useEffect(() => {
+        const checkStale = () => {
+            setIsStale(
+                editStatus === "ai_editing"
+                && !!editClaimedAt
+                && (Date.now() - new Date(editClaimedAt).getTime()) > 30 * 60 * 1000,
+            );
+        };
+        checkStale();
+        const timer = setInterval(checkStale, 60_000);
+        return () => clearInterval(timer);
+    }, [editClaimedAt, editStatus]);
 
     const handleSubmit = () => {
         if (!content.trim()) return;
@@ -67,9 +81,6 @@ export default function FeedbackPanel({ scriptId, editStatus, editClaimedAt, fee
             router.refresh();
         });
     };
-
-    const isStale = editStatus === "ai_editing" && editClaimedAt &&
-        (Date.now() - new Date(editClaimedAt).getTime()) > 30 * 60 * 1000;
 
     return (
         <div className="space-y-4 animate-in fade-in duration-300">

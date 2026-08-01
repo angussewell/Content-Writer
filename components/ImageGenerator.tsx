@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Sparkles, Loader2, Settings2 } from "lucide-react";
+import { Sparkles, Loader2 } from "lucide-react";
 import { generateScriptImage } from "@/app/actions";
 import { toast } from "sonner";
 
@@ -12,10 +12,8 @@ interface ImageGeneratorProps {
 export default function ImageGenerator({ scriptId }: ImageGeneratorProps) {
     const [isPending, startTransition] = useTransition();
     const [prompt, setPrompt] = useState("");
-    const [isOpen, setIsOpen] = useState(false);
 
     const handleGenerate = () => {
-        setIsOpen(false); // Close popover if open
         startTransition(async () => {
             const result = await generateScriptImage(scriptId, prompt);
             if (result.success) {

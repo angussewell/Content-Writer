@@ -121,6 +121,7 @@ export const youtubeIdeas = pgTable("youtube_ideas", {
     description: text("description"),
     status: text("status").default("idea").notNull(),
     notes: text("notes"),
+    thumbnailNotes: text("thumbnail_notes"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
     format: text("format"),

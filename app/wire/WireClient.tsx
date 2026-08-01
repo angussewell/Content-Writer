@@ -107,7 +107,11 @@ export function WireClient({
         const story = stories[cursor];
         if (!story) return;
         if (e.key === "Enter") { e.preventDefault(); assign(story); }
-        else if (k === "x") { e.preventDefault(); story.surfaced ? restore(story.id) : spike(story.id); }
+        else if (k === "x") {
+          e.preventDefault();
+          if (story.surfaced) restore(story.id);
+          else spike(story.id);
+        }
         else if (k === "o") { e.preventDefault(); openSource(story); }
       }
     }

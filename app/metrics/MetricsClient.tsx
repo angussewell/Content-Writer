@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useTransition } from "react";
+import { useState, useMemo, useCallback, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import type { ReelRow } from "./page";
 import { updateMetricField } from "@/app/actions";
@@ -51,6 +51,34 @@ const cmp = (a: number | null, b: number | null, dir: 1 | -1) => {
   if (b == null) return -1;
   return (a - b) * dir;
 };
+
+function SortHeader({
+  column,
+  sortKey,
+  sortDir,
+  align,
+  onSort,
+  children,
+}: {
+  column: SortKey;
+  sortKey: SortKey;
+  sortDir: 1 | -1;
+  align?: "right";
+  onSort: (key: SortKey) => void;
+  children: ReactNode;
+}) {
+  return (
+    <th
+      className={"m-th m-th--sortable" + (align === "right" ? " m-th--right" : "") + (sortKey === column ? " m-th--active" : "")}
+      onClick={() => onSort(column)}
+    >
+      <span className="m-th__inner">
+        {children}
+        {sortKey === column && <span className="m-sort__arrow">{sortDir === 1 ? "↑" : "↓"}</span>}
+      </span>
+    </th>
+  );
+}
 
 function compactNum(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`;
@@ -169,18 +197,6 @@ export function MetricsClient({ rows }: { rows: ReelRow[] }) {
   const cycleTri = (cur: TriFilter): TriFilter =>
     cur === "all" ? "yes" : cur === "yes" ? "no" : "all";
 
-  const Arrow = ({ k }: { k: SortKey }) =>
-    sortKey === k ? <span className="m-sort__arrow">{sortDir === 1 ? "↑" : "↓"}</span> : null;
-
-  const Th = ({ k, children, align }: { k: SortKey; children: React.ReactNode; align?: "right" }) => (
-    <th
-      className={"m-th m-th--sortable" + (align === "right" ? " m-th--right" : "") + (sortKey === k ? " m-th--active" : "")}
-      onClick={() => setSort(k)}
-    >
-      <span className="m-th__inner">{children}<Arrow k={k} /></span>
-    </th>
-  );
-
   return (
     <div className="m-wrap">
       {toast && <div className="m-toast">{toast}</div>}
@@ -253,14 +269,14 @@ export function MetricsClient({ rows }: { rows: ReelRow[] }) {
         <table className="m-table">
           <thead>
             <tr>
-              <Th k="label">Title hook</Th>
-              <Th k="date" align="right">Date</Th>
-              <Th k="reach" align="right">Reach</Th>
+              <SortHeader column="label" sortKey={sortKey} sortDir={sortDir} onSort={setSort}>Title hook</SortHeader>
+              <SortHeader column="date" sortKey={sortKey} sortDir={sortDir} align="right" onSort={setSort}>Date</SortHeader>
+              <SortHeader column="reach" sortKey={sortKey} sortDir={sortDir} align="right" onSort={setSort}>Reach</SortHeader>
               <th className="m-th m-th--right m-th--follows">Follows</th>
-              <Th k="skip" align="right">Skip</Th>
-              <Th k="watch" align="right">Watch</Th>
-              <Th k="saves" align="right">Saves</Th>
-              <Th k="shares" align="right">Shares</Th>
+              <SortHeader column="skip" sortKey={sortKey} sortDir={sortDir} align="right" onSort={setSort}>Skip</SortHeader>
+              <SortHeader column="watch" sortKey={sortKey} sortDir={sortDir} align="right" onSort={setSort}>Watch</SortHeader>
+              <SortHeader column="saves" sortKey={sortKey} sortDir={sortDir} align="right" onSort={setSort}>Saves</SortHeader>
+              <SortHeader column="shares" sortKey={sortKey} sortDir={sortDir} align="right" onSort={setSort}>Shares</SortHeader>
               <th className="m-th m-th--right" aria-label="Actions" />
             </tr>
           </thead>

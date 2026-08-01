@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 export const dynamic = "force-dynamic";
 import { sql } from "drizzle-orm";
 import Link from "next/link";
-import { createScript, updateScriptStatus } from "./actions";
+import { createScript } from "./actions";
 import { Topbar } from "@/components/Topbar";
 
 function formatDate(date: Date | string) {

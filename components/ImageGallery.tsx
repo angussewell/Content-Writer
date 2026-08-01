@@ -1,10 +1,10 @@
 "use client";
+/* eslint-disable @next/next/no-img-element -- remote generated assets are intentionally rendered at their source URLs */
 
 import { useTransition } from "react";
 import { Download, Trash2, ExternalLink, RefreshCw } from "lucide-react";
 import { deleteScriptImage } from "@/app/actions";
 import { toast } from "sonner";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 
 interface ScriptImage {

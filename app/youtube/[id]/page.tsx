@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import FilmSections, { type SectionData } from "@/components/FilmSections";
+import ThumbnailSketch from "@/components/ThumbnailSketch";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,7 @@ type IdeaRow = {
   title: string;
   description: string | null;
   status: string;
+  thumbnail_notes: string | null;
   archived_at: string | null;
   created_at: string;
 };
@@ -57,7 +59,7 @@ export default async function YoutubeScriptPage({
 
   const ideaRes = await db
     .execute(sql`
-      SELECT id::text AS id, title, description, status, archived_at, created_at
+      SELECT id::text AS id, title, description, status, thumbnail_notes, archived_at, created_at
       FROM youtube_ideas
       WHERE id = ${id}::uuid
       LIMIT 1
@@ -95,7 +97,7 @@ export default async function YoutubeScriptPage({
 
   return (
     <main className="ytd">
-      <div className="container ytd__inner">
+      <div className="container ytd__inner ytd__inner--script">
         <div className="fs-topline">
           <Link href="/youtube" className="ytd-back">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -124,6 +126,8 @@ export default async function YoutubeScriptPage({
           <h1 className="fs-title">{idea.title}</h1>
           {idea.description && <p className="fs-desc">{idea.description}</p>}
         </header>
+
+        <ThumbnailSketch ideaId={idea.id} initialNotes={idea.thumbnail_notes ?? ""} />
 
         <FilmSections ideaId={idea.id} initialSections={sections} />
       </div>

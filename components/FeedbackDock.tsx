@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useEffect, useRef } from "react";
+import { useState, useTransition, useEffect, useRef, useCallback } from "react";
 import { saveFeedback, deleteFeedback } from "@/app/actions";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -35,17 +35,7 @@ export function FeedbackDock({ scriptId, feedback, onClose }: FeedbackDockProps)
     const taRef = useRef<HTMLTextAreaElement>(null);
     const router = useRouter();
 
-    useEffect(() => {
-        taRef.current?.focus();
-        const onKey = (e: KeyboardEvent) => {
-            if (e.key === "Escape") onClose();
-            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") handleSubmit();
-        };
-        window.addEventListener("keydown", onKey);
-        return () => window.removeEventListener("keydown", onKey);
-    }, [draft]);
-
-    const handleSubmit = () => {
+    const handleSubmit = useCallback(() => {
         if (!draft.trim() || isPending) return;
         startTransition(async () => {
             const result = await saveFeedback(scriptId, draft.trim());
@@ -57,7 +47,17 @@ export function FeedbackDock({ scriptId, feedback, onClose }: FeedbackDockProps)
                 router.refresh();
             }
         });
-    };
+    }, [draft, isPending, router, scriptId]);
+
+    useEffect(() => {
+        taRef.current?.focus();
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === "Escape") onClose();
+            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") handleSubmit();
+        };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, [handleSubmit, onClose]);
 
     const handleDelete = (id: string) => {
         startTransition(async () => {

@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @next/next/no-img-element -- remote generated assets are intentionally rendered at their source URLs */
 
 import { useState, useEffect, useTransition } from "react";
 import { generateScriptImage, deleteScriptImage } from "@/app/actions";

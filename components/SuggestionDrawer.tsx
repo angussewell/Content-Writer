@@ -8,10 +8,18 @@ import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 
 
+type SuggestionAlternative = string | {
+    hook?: string;
+    text?: string;
+    intro?: string;
+    structure?: string;
+    reasoning?: string;
+};
+
 interface SuggestionContent {
-    alternatives?: any[];
+    alternatives?: SuggestionAlternative[];
     score?: number;
-    [key: string]: any;
+    [key: string]: unknown;
 }
 
 interface SuggestionRecord {
@@ -42,7 +50,7 @@ export default function SuggestionDrawer({ introId, type, currentText, isOpen, o
         if (isOpen && introId && type) {
             startTransition(async () => {
                 const suggestions = await getSuggestions(introId, type);
-                setHistory(suggestions as any as SuggestionRecord[]);
+                setHistory(suggestions as unknown as SuggestionRecord[]);
             });
         }
     }, [isOpen, introId, type]);
@@ -57,7 +65,7 @@ export default function SuggestionDrawer({ introId, type, currentText, isOpen, o
             } else {
                 // Refresh history
                 const suggestions = await getSuggestions(introId, type);
-                setHistory(suggestions as any as SuggestionRecord[]);
+                setHistory(suggestions as unknown as SuggestionRecord[]);
                 toast.success("Analysis complete");
             }
         });
@@ -131,7 +139,7 @@ export default function SuggestionDrawer({ introId, type, currentText, isOpen, o
                                             </div>
                                             <div className="p-4 space-y-4">
                                                 {/* Alternatives */}
-                                                {data.alternatives && Array.isArray(data.alternatives) && data.alternatives.map((alt: any, idx: number) => {
+                                                {data.alternatives && Array.isArray(data.alternatives) && data.alternatives.map((alt, idx) => {
                                                     const text = typeof alt === 'string' ? alt : (alt.hook || alt.text || alt.intro || JSON.stringify(alt));
                                                     return (
                                                         <div key={idx} className="group relative pl-3 border-l-2 border-transparent hover:border-green-500 transition-colors">

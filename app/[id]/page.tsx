@@ -79,15 +79,15 @@ export default async function ScriptPage({ params }: { params: Promise<{ id: str
                     id: script.id,
                     title: script.title,
                     lines,
-                    status: script.status as any, // Cast to match interface in Editor
+                    status: script.status as "draft" | "filmed" | "done" | "archived",
                     editStatus: script.editStatus as "idle" | "needs_ai_edit" | "ai_editing",
                     editClaimedAt: script.editClaimedAt,
-                    intros: scriptIntros.map((i): any => ({
+                    intros: scriptIntros.map((i) => ({
                         id: i.id,
                         titleHook: i.titleHook || "",
                         verbalIntro: i.verbalIntro || "",
                     })),
-                    contextItems: scriptContextItems.map((c): any => ({
+                    contextItems: scriptContextItems.map((c) => ({
                         id: c.id,
                         content: c.content || "",
                     })),

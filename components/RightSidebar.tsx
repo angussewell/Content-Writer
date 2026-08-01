@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { cn } from "@/lib/utils";
-import { ChevronRight, ChevronsRight, StickyNote, Image as ImageIcon, X, MessageSquare } from "lucide-react";
+import { ChevronsRight, StickyNote, Image as ImageIcon, X, MessageSquare } from "lucide-react";
 
 type SidebarTab = "context" | "assets" | "feedback";
 

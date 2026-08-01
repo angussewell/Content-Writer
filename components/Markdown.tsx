@@ -9,30 +9,29 @@ import React from "react";
    Tuned for the talking-head reaction-prep notes format.
    ============================================================ */
 
-let keySeed = 0;
-const k = () => `md-${keySeed++}`;
+type KeyFactory = () => string;
 
 // ---- inline ---------------------------------------------------------------
 
 const URL_RE = /(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])/g;
 
-function inline(text: string): React.ReactNode[] {
+function inline(text: string, key: KeyFactory): React.ReactNode[] {
   const nodes: React.ReactNode[] = [];
   let rest = text;
 
   // Ordered scan for the earliest inline token.
   const patterns: { re: RegExp; render: (m: RegExpExecArray) => React.ReactNode }[] = [
-    { re: /\*\*([^*]+)\*\*/, render: (m) => <strong key={k()}>{inline(m[1])}</strong> },
-    { re: /__([^_]+)__/, render: (m) => <strong key={k()}>{inline(m[1])}</strong> },
-    { re: /~~([^~]+)~~/, render: (m) => <s key={k()}>{inline(m[1])}</s> },
-    { re: /`([^`]+)`/, render: (m) => <code key={k()} className="md-code">{m[1]}</code> },
-    { re: /\*([^*\n]+)\*/, render: (m) => <em key={k()}>{inline(m[1])}</em> },
-    { re: /(?<![\w])_([^_\n]+)_(?![\w])/, render: (m) => <em key={k()}>{inline(m[1])}</em> },
+    { re: /\*\*([^*]+)\*\*/, render: (m) => <strong key={key()}>{inline(m[1], key)}</strong> },
+    { re: /__([^_]+)__/, render: (m) => <strong key={key()}>{inline(m[1], key)}</strong> },
+    { re: /~~([^~]+)~~/, render: (m) => <s key={key()}>{inline(m[1], key)}</s> },
+    { re: /`([^`]+)`/, render: (m) => <code key={key()} className="md-code">{m[1]}</code> },
+    { re: /\*([^*\n]+)\*/, render: (m) => <em key={key()}>{inline(m[1], key)}</em> },
+    { re: /(?<![\w])_([^_\n]+)_(?![\w])/, render: (m) => <em key={key()}>{inline(m[1], key)}</em> },
     {
       re: /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/,
       render: (m) => (
-        <a key={k()} href={m[2]} target="_blank" rel="noopener noreferrer" className="md-link">
-          {inline(m[1])}
+        <a key={key()} href={m[2]} target="_blank" rel="noopener noreferrer" className="md-link">
+          {inline(m[1], key)}
         </a>
       ),
     },
@@ -59,7 +58,7 @@ function inline(text: string): React.ReactNode[] {
         idx: u.index,
         len: url.length,
         node: (
-          <a key={k()} href={url} target="_blank" rel="noopener noreferrer" className="md-link md-link--url">
+          <a key={key()} href={url} target="_blank" rel="noopener noreferrer" className="md-link md-link--url">
             {label}
           </a>
         ),
@@ -82,7 +81,7 @@ function inline(text: string): React.ReactNode[] {
 
 type ListItem = { text: string; indented: boolean };
 
-function renderList(items: ListItem[], ordered: boolean): React.ReactNode {
+function renderList(items: ListItem[], ordered: boolean, key: KeyFactory): React.ReactNode {
   // Group into top-level items, attaching indented lines as nested sub-lists.
   const top: { text: string; children: string[] }[] = [];
   for (const it of items) {
@@ -95,15 +94,15 @@ function renderList(items: ListItem[], ordered: boolean): React.ReactNode {
 
   const Tag = ordered ? "ol" : "ul";
   return (
-    <Tag key={k()} className={ordered ? "md-ol" : "md-ul"}>
+    <Tag key={key()} className={ordered ? "md-ol" : "md-ul"}>
       {top.map((item) => (
-        <li key={k()} className="md-li">
-          <span>{inline(item.text)}</span>
+        <li key={key()} className="md-li">
+          <span>{inline(item.text, key)}</span>
           {item.children.length > 0 && (
             <ul className="md-ul md-ul--nested">
               {item.children.map((c) => (
-                <li key={k()} className="md-li">
-                  {inline(c)}
+                <li key={key()} className="md-li">
+                  {inline(c, key)}
                 </li>
               ))}
             </ul>
@@ -117,17 +116,18 @@ function renderList(items: ListItem[], ordered: boolean): React.ReactNode {
 // Render each line on its own line: a single line break the user typed shows
 // as a <br> instead of being collapsed to a space. Keeps small line breaks
 // clear on screen and intact when the note is selected and copied.
-function withBreaks(lines: string[]): React.ReactNode[] {
+function withBreaks(lines: string[], key: KeyFactory): React.ReactNode[] {
   const nodes: React.ReactNode[] = [];
   lines.forEach((ln, idx) => {
-    if (idx > 0) nodes.push(<br key={k()} />);
-    nodes.push(...inline(ln));
+    if (idx > 0) nodes.push(<br key={key()} />);
+    nodes.push(...inline(ln, key));
   });
   return nodes;
 }
 
 export function Markdown({ text }: { text: string }) {
-  keySeed = 0;
+  let keySeed = 0;
+  const key = () => `md-${keySeed++}`;
   const lines = text.replace(/\r\n/g, "\n").split("\n");
   const out: React.ReactNode[] = [];
 
@@ -137,8 +137,8 @@ export function Markdown({ text }: { text: string }) {
   const flushPara = () => {
     if (para.length === 0) return;
     out.push(
-      <p key={k()} className="md-p">
-        {withBreaks(para)}
+      <p key={key()} className="md-p">
+        {withBreaks(para, key)}
       </p>,
     );
     para = [];
@@ -167,7 +167,7 @@ export function Markdown({ text }: { text: string }) {
       }
       i++; // closing fence
       out.push(
-        <pre key={k()} className="md-pre">
+        <pre key={key()} className="md-pre">
           <code>{buf.join("\n")}</code>
         </pre>,
       );
@@ -177,7 +177,7 @@ export function Markdown({ text }: { text: string }) {
     // horizontal rule
     if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) {
       flushPara();
-      out.push(<hr key={k()} className="md-hr" />);
+      out.push(<hr key={key()} className="md-hr" />);
       i++;
       continue;
     }
@@ -189,8 +189,8 @@ export function Markdown({ text }: { text: string }) {
       const level = Math.min(h[1].length, 4);
       const Tag = `h${level}` as "h1" | "h2" | "h3" | "h4";
       out.push(
-        <Tag key={k()} className={`md-h md-h${level}`}>
-          {inline(h[2])}
+        <Tag key={key()} className={`md-h md-h${level}`}>
+          {inline(h[2], key)}
         </Tag>,
       );
       i++;
@@ -206,8 +206,8 @@ export function Markdown({ text }: { text: string }) {
         i++;
       }
       out.push(
-        <blockquote key={k()} className="md-quote">
-          {withBreaks(buf)}
+        <blockquote key={key()} className="md-quote">
+          {withBreaks(buf, key)}
         </blockquote>,
       );
       continue;
@@ -222,7 +222,7 @@ export function Markdown({ text }: { text: string }) {
         items.push({ text: m[2], indented: m[1].length >= 2 });
         i++;
       }
-      out.push(renderList(items, false));
+      out.push(renderList(items, false, key));
       continue;
     }
 
@@ -235,7 +235,7 @@ export function Markdown({ text }: { text: string }) {
         items.push({ text: m[2], indented: m[1].length >= 3 });
         i++;
       }
-      out.push(renderList(items, true));
+      out.push(renderList(items, true, key));
       continue;
     }
 
