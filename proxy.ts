@@ -5,7 +5,7 @@ import type { NextRequest } from "next/server";
 // tab links, which always carry a ?tab= query.
 const MOBILE_UA = /iPhone|iPod|Windows Phone|Android.+Mobile|Mobi/i;
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
     const authCookie = request.cookies.get("auth");
     const isAuthenticated = authCookie?.value === "true";
 

@@ -41,6 +41,12 @@ export function Topbar({
             <span className="tab__count">{ideasCount}</span>
           </Link>
           <Link
+            href="/inspiration"
+            className={"tab " + (activeTab === "inspiration" ? "tab--active" : "")}
+          >
+            <span className="tab__label">Hooks</span>
+          </Link>
+          <Link
             href="/youtube"
             className={"tab " + (activeTab === "youtube" ? "tab--active" : "")}
           >

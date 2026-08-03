@@ -897,3 +897,69 @@ export async function deleteRewrite(id: number, instagramMetricsId: number) {
     revalidatePath("/metrics");
     return { success: true };
 }
+
+type InspirationHookInput = {
+    sourceUrl: string;
+    creatorHandle: string;
+    firstSentence: string;
+    secondSentence: string;
+    onScreenText: string;
+    openingVisual: string;
+    notes: string;
+};
+
+function isUuid(value: string) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+export async function updateInspirationHook(id: string, input: InspirationHookInput) {
+    if (!isUuid(id)) return { success: false as const, error: "Invalid hook ID." };
+
+    const sourceUrl = input.sourceUrl.trim();
+    const creatorHandle = input.creatorHandle.trim().replace(/^@/, "");
+    const firstSentence = input.firstSentence.trim();
+    const openingVisual = input.openingVisual.trim();
+
+    if (!sourceUrl || !creatorHandle || !firstSentence || !openingVisual) {
+        return { success: false as const, error: "Source, creator, first sentence, and opening visual are required." };
+    }
+
+    try {
+        const result = await db.execute(sql`
+            UPDATE inspiration_hooks
+            SET source_url = ${sourceUrl},
+                creator_handle = ${creatorHandle},
+                first_sentence = ${firstSentence},
+                second_sentence = NULLIF(${input.secondSentence.trim()}, ''),
+                on_screen_text = NULLIF(${input.onScreenText.trim()}, ''),
+                opening_visual = ${openingVisual},
+                notes = NULLIF(${input.notes.trim()}, ''),
+                updated_at = now()
+            WHERE id = ${id}::uuid
+            RETURNING updated_at
+        `);
+        const row = result.rows[0] as { updated_at: Date | string } | undefined;
+        if (!row) return { success: false as const, error: "Hook not found." };
+        revalidatePath("/inspiration");
+        return { success: true as const, updatedAt: new Date(row.updated_at).toISOString() };
+    } catch (error) {
+        console.error("[updateInspirationHook]", error);
+        return { success: false as const, error: "Couldn’t save this hook." };
+    }
+}
+
+export async function deleteInspirationHook(id: string) {
+    if (!isUuid(id)) return { success: false as const, error: "Invalid hook ID." };
+
+    try {
+        const result = await db.execute(sql`
+            DELETE FROM inspiration_hooks WHERE id = ${id}::uuid RETURNING id
+        `);
+        if (!result.rows[0]) return { success: false as const, error: "Hook not found." };
+        revalidatePath("/inspiration");
+        return { success: true as const };
+    } catch (error) {
+        console.error("[deleteInspirationHook]", error);
+        return { success: false as const, error: "Couldn’t delete this hook." };
+    }
+}

@@ -2707,6 +2707,141 @@ body::before {
 }
 
 /* ============================================================
+   INSPIRATION HOOKS — /inspiration
+   ============================================================ */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+.ih-main { position: static; z-index: auto; padding-top: 44px; }
+.ih-main .container { z-index: auto; }
+.ih-pagehead { margin-bottom: 28px; }
+.ih-toolbar {
+  display: flex; align-items: center; gap: 18px;
+  padding: 14px 0 18px; border-top: 1px solid var(--hairline-soft);
+}
+.ih-search {
+  flex: 1; max-width: 520px; height: 40px; padding: 0 14px;
+  display: flex; align-items: center; gap: 9px;
+  color: var(--ink-4); background: var(--paper-2);
+  border: 1px solid var(--hairline); border-radius: 999px;
+  transition: border-color .15s, background .15s;
+}
+.ih-search:focus-within { border-color: var(--ink-3); background: var(--paper); color: var(--ink-2); }
+.ih-search input { width: 100%; border: 0; outline: 0; background: transparent; font-size: 14px; }
+.ih-count { margin: 0 0 0 auto; color: var(--ink-4); font-family: var(--mono); font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; }
+.ih-count strong { color: var(--ink-2); font-weight: 500; }
+.ih-workspace {
+  display: grid; grid-template-columns: minmax(0, .92fr) minmax(420px, 1.08fr);
+  gap: 24px; align-items: start;
+}
+.ih-list { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.ih-card {
+  padding: 16px; color: var(--ink);
+  background: color-mix(in oklab, var(--paper-2) 86%, var(--paper));
+  border: 1px solid var(--hairline-soft); border-radius: 14px;
+  transition: border-color .15s, background .15s, box-shadow .15s;
+}
+.ih-card:hover { border-color: var(--hairline); background: var(--paper-2); }
+.ih-card--selected { border-color: color-mix(in oklab, var(--accent) 52%, var(--hairline)); box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 12%, transparent); }
+.ih-card__meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; margin-bottom: 9px; color: var(--ink-4); font-family: var(--mono); font-size: 10px; letter-spacing: .035em; text-transform: uppercase; }
+.ih-handle { color: var(--accent-ink); }
+.ih-card__first { margin: 0; color: var(--ink); font-family: var(--serif); font-size: 19px; line-height: 1.25; letter-spacing: -.012em; text-wrap: pretty; }
+.ih-card__second { display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; margin: 7px 0 0; color: var(--ink-2); font-size: 13.5px; line-height: 1.45; }
+.ih-card__artifacts { display: grid; grid-template-columns: 1fr 1.2fr; gap: 8px; margin-top: 12px; }
+.ih-artifact { padding: 8px 10px; background: color-mix(in oklab, var(--paper) 72%, transparent); border: 1px solid var(--rule-2); border-radius: 9px; }
+.ih-artifact__label { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; color: var(--ink-4); font-family: var(--mono); font-size: 9.5px; letter-spacing: .11em; text-transform: uppercase; }
+.ih-artifact__text { display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; color: var(--ink-3); font-size: 12.5px; line-height: 1.45; }
+.ih-artifact__text--title { color: var(--accent-ink); font-family: var(--mono); font-size: 11.5px; }
+.ih-card__footer { display: flex; align-items: center; gap: 12px; margin-top: 10px; padding-top: 9px; border-top: 1px dashed var(--hairline-soft); color: var(--ink-4); font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+.ih-source-link, .ih-edit-button { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-3); text-decoration: none; }
+.ih-source-link { margin-left: auto; }
+.ih-source-link:hover { color: var(--accent-ink); }
+.ih-edit-button { appearance: none; border: 0; background: transparent; padding: 4px 0 4px 8px; font: inherit; text-transform: inherit; letter-spacing: inherit; }
+.ih-edit-button:hover { color: var(--ink); }
+.ih-no-results { padding: 44px 20px; color: var(--ink-4); text-align: center; font-family: var(--serif); font-size: 18px; font-style: italic; }
+.ih-empty { padding: 72px 0; }
+
+.ih-detail {
+  position: sticky; top: 88px; min-width: 0;
+  max-height: calc(100dvh - 112px); display: flex; flex-direction: column;
+  background: var(--paper); border: 1px solid var(--hairline); border-radius: 16px;
+  box-shadow: var(--shadow); overflow: hidden;
+}
+.ih-detail__head { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 20px 22px; border-bottom: 1px solid var(--rule-2); flex-shrink: 0; }
+.ih-detail__eyebrow { display: block; margin-bottom: 3px; color: var(--accent-ink); font-family: var(--mono); font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; }
+.ih-detail h2 { margin: 0; font-family: var(--serif); font-size: 22px; font-weight: 500; letter-spacing: -.01em; }
+.ih-close { display: none; width: 40px; height: 40px; align-items: center; justify-content: center; border: 1px solid var(--hairline); border-radius: 999px; background: transparent; color: var(--ink-3); }
+.ih-editor { flex: 1; overflow-y: auto; padding: 20px 22px 26px; }
+.ih-editor::-webkit-scrollbar { width: 8px; }
+.ih-editor::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 999px; }
+.ih-identity { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-bottom: 22px; color: var(--ink-4); font-family: var(--mono); font-size: 9.5px; letter-spacing: .04em; text-transform: uppercase; }
+.ih-identity span:first-child { color: var(--accent-ink); }
+.ih-field { display: block; margin-bottom: 17px; }
+.ih-field__label { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 7px; color: var(--ink-3); font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; }
+.ih-field__label em { color: var(--ink-4); font-size: 8.5px; font-style: normal; letter-spacing: .06em; }
+.ih-field textarea, .ih-field input {
+  display: block; width: 100%; padding: 11px 12px;
+  color: var(--ink); background: var(--paper-2);
+  border: 1px solid var(--hairline-soft); border-radius: 9px;
+  outline: none; resize: vertical; font-size: 14px; line-height: 1.5;
+  transition: border-color .15s, background .15s, box-shadow .15s;
+}
+.ih-field textarea:focus, .ih-field input:focus { background: var(--paper); border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent-soft) 58%, transparent); }
+.ih-fieldgrid { display: grid; grid-template-columns: .72fr 1.28fr; gap: 12px; }
+.ih-detail__actions { display: flex; align-items: center; gap: 12px; padding: 14px 22px; border-top: 1px solid var(--rule-2); background: color-mix(in oklab, var(--paper) 92%, var(--paper-2)); flex-shrink: 0; }
+.ih-delete, .ih-save { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 38px; padding: 0 14px; border-radius: 999px; font: inherit; font-size: 12.5px; font-weight: 500; }
+.ih-delete { color: var(--accent-ink); background: transparent; border: 1px solid var(--hairline); }
+.ih-delete:hover { border-color: var(--accent); background: var(--accent-soft); }
+.ih-save { color: var(--paper); background: var(--ink); border: 1px solid var(--ink); }
+.ih-save:hover { background: var(--ink-2); }
+.ih-save:disabled, .ih-delete:disabled { cursor: default; opacity: .45; }
+.ih-save-state { margin-left: auto; color: var(--ink-4); font-family: var(--mono); font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; }
+.ih-save-state--dirty { color: var(--accent-ink); }
+.ih-detail__blank { min-height: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--ink-4); }
+.ih-detail__blank p { margin: 0; font-family: var(--serif); font-size: 17px; font-style: italic; }
+
+@media (max-width: 900px) {
+  .ih-workspace { grid-template-columns: minmax(0, 1fr) minmax(360px, .92fr); gap: 16px; }
+  .ih-card__artifacts { grid-template-columns: 1fr; }
+  .ih-fieldgrid { grid-template-columns: 1fr; gap: 0; }
+}
+
+@media (max-width: 720px) {
+  .ih-main { padding-top: 28px; }
+  .ih-toolbar { align-items: stretch; flex-direction: column; gap: 10px; }
+  .ih-search { max-width: none; height: 44px; }
+  .ih-search input { font-size: 16px; }
+  .ih-count { margin-left: 2px; }
+  .ih-workspace { display: block; }
+  .ih-list { gap: 12px; }
+  .ih-card { padding: 18px 16px; }
+  .ih-card__first { font-size: 20px; }
+  .ih-card__meta { margin-bottom: 12px; }
+  .ih-card__second { margin-top: 9px; font-size: 14px; line-height: 1.5; }
+  .ih-card__artifacts { grid-template-columns: 1fr; }
+  .ih-artifact { padding: 11px 12px; }
+  .ih-artifact__label { margin-bottom: 5px; }
+  .ih-card__footer { flex-wrap: wrap; gap: 8px 14px; }
+  .ih-source-link { margin-left: 0; min-height: 40px; }
+  .ih-edit-button { min-height: 40px; margin-left: auto; padding: 0 10px; border: 1px solid var(--hairline); border-radius: 999px; }
+  .ih-detail { display: none; }
+  .ih-detail--open {
+    position: fixed; inset: 0; z-index: 60; display: flex;
+    max-height: 100dvh; border: 0; border-radius: 0; box-shadow: none;
+  }
+  .ih-detail__head { position: sticky; top: 0; z-index: 2; padding: 14px 18px; background: var(--paper); }
+  .ih-close { display: inline-flex; }
+  .ih-editor { padding: 18px 18px 100px; }
+  .ih-field textarea, .ih-field input { font-size: 16px; }
+  .ih-fieldgrid { grid-template-columns: 1fr; gap: 0; }
+  .ih-detail__actions { position: fixed; left: 0; right: 0; bottom: 0; z-index: 3; padding: 12px 16px max(12px, env(safe-area-inset-bottom)); background: var(--paper); box-shadow: 0 -16px 32px -24px rgba(40,30,15,.32); }
+  .ih-save-state { display: none; }
+  .ih-save { margin-left: auto; min-height: 44px; }
+  .ih-delete { min-height: 44px; }
+}
+
+/* ============================================================
    YOUTUBE FILM SCRIPT — /youtube list + /youtube/[id] editor
    (issue #2790: sectioned script over youtube_film_sections)
    ============================================================ */
