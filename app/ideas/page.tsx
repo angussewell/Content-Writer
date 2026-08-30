@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { sql } from "drizzle-orm";
 import Link from "next/link";
 import { Topbar } from "@/components/Topbar";
+import { getWorkspaceTabs } from "@/lib/workspaceTabs";
 import { IdeasClient } from "./IdeasClient";
 
 export const dynamic = "force-dynamic";
@@ -89,14 +90,8 @@ export default async function IdeasPage({
   const ytCounts = ytCountsResult.rows[0] as YtCounts;
 
   // Workspace tab counts
-  const wsCounts = await db.execute(sql`
-    SELECT
-      COUNT(*) FILTER (WHERE status = 'draft')::int AS write_count,
-      COUNT(*) FILTER (WHERE status = 'filmed')::int AS edit_count,
-      COUNT(*) FILTER (WHERE status IN ('done', 'archived'))::int AS archive_count
-    FROM scripts
-  `);
-  const ws = wsCounts.rows[0] as { write_count: number; edit_count: number; archive_count: number };
+  // Workspace tabs are derived from scripts.status (#4044).
+  const { tabs: workspaceTabs } = await getWorkspaceTabs();
 
   const metricsCountRes = await db.execute(sql`
     SELECT COUNT(DISTINCT instagram_metrics_id)::int AS c
@@ -182,11 +177,7 @@ export default async function IdeasPage({
         ideasCount={counts.fresh_unworked}
         metricsCount={metricsCount}
         activeTab="ideas"
-        workspaceTabs={[
-          { id: "write", label: "Write", count: ws.write_count, href: "/?tab=write" },
-          { id: "edit", label: "Edit", count: ws.edit_count, href: "/?tab=edit" },
-          { id: "archive", label: "Archive", count: ws.archive_count, href: "/?tab=archive" },
-        ]}
+        workspaceTabs={workspaceTabs}
       />
 
       <main className="main">

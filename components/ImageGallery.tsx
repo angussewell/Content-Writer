@@ -6,6 +6,7 @@ import { Download, Trash2, ExternalLink, RefreshCw } from "lucide-react";
 import { deleteScriptImage } from "@/app/actions";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { cloudinaryThumb, THUMB_WIDTH, THUMB_HEIGHT } from "@/lib/cloudinary";
 
 interface ScriptImage {
     id: string;
@@ -69,11 +70,15 @@ export default function ImageGallery({ images }: { images: ScriptImage[] }) {
                 <div className="grid grid-cols-2 gap-3">
                     {images.map((img) => (
                         <div key={img.id} className="group relative aspect-[9/16] bg-neutral-100 dark:bg-neutral-800 rounded-lg overflow-hidden border border-neutral-200 dark:border-neutral-800 animate-in fade-in duration-500">
+                            {/* Thumbnail derivative, not the full-resolution original (#4489). */}
                             <img
-                                src={img.imageUrl}
+                                src={cloudinaryThumb(img.imageUrl)}
                                 alt={img.prompt || "Generated B-Roll"}
+                                width={THUMB_WIDTH}
+                                height={THUMB_HEIGHT}
                                 className="w-full h-full object-cover"
                                 loading="lazy"
+                                decoding="async"
                             />
 
                             {/* Overlay */}

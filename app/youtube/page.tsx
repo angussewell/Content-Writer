@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { sql } from "drizzle-orm";
 import Link from "next/link";
 import { Topbar } from "@/components/Topbar";
+import { getWorkspaceTabs } from "@/lib/workspaceTabs";
 import { fmtClock } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -68,14 +69,8 @@ export default async function YoutubePage({
   `).catch(() => ({ rows: [{ c: 0 }] }));
   const ideasCount = (ideasCountRes.rows[0] as { c: number }).c;
 
-  const wsCounts = await db.execute(sql`
-    SELECT
-      COUNT(*) FILTER (WHERE status = 'draft')::int AS write_count,
-      COUNT(*) FILTER (WHERE status = 'filmed')::int AS edit_count,
-      COUNT(*) FILTER (WHERE status IN ('done', 'archived'))::int AS archive_count
-    FROM scripts
-  `);
-  const ws = wsCounts.rows[0] as { write_count: number; edit_count: number; archive_count: number };
+  // Workspace tabs are derived from scripts.status (#4044).
+  const { tabs: workspaceTabs } = await getWorkspaceTabs();
 
   const ytCountsResult = await db.execute(sql`
     SELECT
@@ -121,11 +116,7 @@ export default async function YoutubePage({
         ideasCount={ideasCount}
         youtubeCount={ytCounts.queue}
         activeTab="youtube"
-        workspaceTabs={[
-          { id: "write", label: "Write", count: ws.write_count, href: "/?tab=write" },
-          { id: "edit", label: "Edit", count: ws.edit_count, href: "/?tab=edit" },
-          { id: "archive", label: "Archive", count: ws.archive_count, href: "/?tab=archive" },
-        ]}
+        workspaceTabs={workspaceTabs}
       />
 
       <main className="main">

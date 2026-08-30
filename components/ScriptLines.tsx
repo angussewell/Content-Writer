@@ -35,6 +35,9 @@ export interface LineData {
 type EditableField = "say" | "onScreen" | "rationale";
 type SaveState = "saving" | "saved" | "error";
 type InsertPlacement = "before" | "after";
+/** Every editable line field, for sweeps over unsaved values. */
+const FIELDS: EditableField[] = ["say", "onScreen", "rationale"];
+
 const DB_FIELD: Record<EditableField, "say" | "on_screen" | "rationale"> = {
     say: "say",
     onScreen: "on_screen",
@@ -375,6 +378,49 @@ export default function ScriptLines({
     useEffect(() => () => {
         Object.values(saveStateTimersRef.current).forEach(clearTimeout);
     }, []);
+
+    // Line fields save on blur, which leaves a hole on mobile: switching apps
+    // straight from a focused textarea can freeze the tab before blur fires, so
+    // the keystrokes are lost silently (#4110). Flush anything that differs from
+    // the last persisted value the moment the page is hidden, over a keepalive
+    // fetch the browser must finish even while the page is being torn down.
+    const linesRef = useRef(lines);
+    useEffect(() => { linesRef.current = lines; }, [lines]);
+
+    useEffect(() => {
+        const flush = () => {
+            const pending: { lineId: string; field: EditableField; value: string }[] = [];
+            for (const line of linesRef.current) {
+                for (const field of FIELDS) {
+                    const value = line[field];
+                    if (savedRef.current[`${line.id}:${field}`] !== value) {
+                        pending.push({ lineId: line.id, field, value });
+                    }
+                }
+            }
+            if (pending.length === 0) return;
+            for (const { lineId, field, value } of pending) {
+                savedRef.current[`${lineId}:${field}`] = value;
+                try {
+                    void fetch(`/api/scripts/${scriptId}/lines/${lineId}`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ field: DB_FIELD[field], value }),
+                        keepalive: true,
+                    }).catch(() => { delete savedRef.current[`${lineId}:${field}`]; });
+                } catch {
+                    delete savedRef.current[`${lineId}:${field}`];
+                }
+            }
+        };
+        const onVisibility = () => { if (document.visibilityState === "hidden") flush(); };
+        document.addEventListener("visibilitychange", onVisibility);
+        window.addEventListener("pagehide", flush);
+        return () => {
+            document.removeEventListener("visibilitychange", onVisibility);
+            window.removeEventListener("pagehide", flush);
+        };
+    }, [scriptId]);
 
     useEffect(() => {
         if (!onStats) return;

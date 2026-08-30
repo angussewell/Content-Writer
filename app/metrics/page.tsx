@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { sql } from "drizzle-orm";
 import { Topbar } from "@/components/Topbar";
+import { getWorkspaceTabs } from "@/lib/workspaceTabs";
 import Link from "next/link";
 import { getRepurposedReelIds } from "@/lib/repurposedReels";
 import { MetricsClient } from "./MetricsClient";
@@ -56,15 +57,8 @@ export default async function MetricsPage({
 }) {
   const { platform: platformParam } = await searchParams;
   const platform = platformParam === "tiktok" ? "tiktok" : "instagram";
-  const ws = (await db.execute(sql`
-    SELECT
-      COUNT(*) FILTER (WHERE status = 'draft')::int AS write_count,
-      COUNT(*) FILTER (WHERE status = 'filmed')::int AS edit_count,
-      COUNT(*) FILTER (WHERE status IN ('done', 'archived'))::int AS archive_count
-    FROM scripts
-  `).catch(() => ({ rows: [{ write_count: 0, edit_count: 0, archive_count: 0 }] }))).rows[0] as {
-    write_count: number; edit_count: number; archive_count: number;
-  };
+  // Workspace tabs are derived from scripts.status (#4044).
+  const { tabs: workspaceTabs } = await getWorkspaceTabs();
 
   const ideasCount = ((await db.execute(sql`
     SELECT COUNT(*)::int AS c FROM video_ideas
@@ -151,11 +145,7 @@ export default async function MetricsPage({
         ideasCount={ideasCount}
         metricsCount={metricsCount}
         activeTab="metrics"
-        workspaceTabs={[
-          { id: "write", label: "Write", count: ws.write_count, href: "/?tab=write" },
-          { id: "edit", label: "Edit", count: ws.edit_count, href: "/?tab=edit" },
-          { id: "archive", label: "Archive", count: ws.archive_count, href: "/?tab=archive" },
-        ]}
+        workspaceTabs={workspaceTabs}
       />
 
       <main className="main">

@@ -5,6 +5,7 @@ import { useState, useEffect, useTransition } from "react";
 import { generateScriptImage, deleteScriptImage } from "@/app/actions";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { cloudinaryThumb, THUMB_WIDTH, THUMB_HEIGHT } from "@/lib/cloudinary";
 
 interface ScriptImage {
     id: string;
@@ -215,11 +216,17 @@ export function AssetsOverlay({ scriptId, images, onClose }: AssetsOverlayProps)
                                     onClick={() => setLight(idx)}
                                 >
                                     <div className="as-card__thumb">
+                                        {/* Thumbnail derivative, not the 1080x1920 original (#4489).
+                                            Explicit width/height give the browser a box before load, which
+                                            is what makes loading="lazy" actually defer off-screen cards. */}
                                         <img
-                                            src={img.imageUrl}
+                                            src={cloudinaryThumb(img.imageUrl)}
                                             alt={img.prompt || "B-Roll"}
+                                            width={THUMB_WIDTH}
+                                            height={THUMB_HEIGHT}
                                             style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
                                             loading="lazy"
+                                            decoding="async"
                                         />
                                         <button
                                             className="as-card__check"
@@ -254,10 +261,12 @@ export function AssetsOverlay({ scriptId, images, onClose }: AssetsOverlayProps)
                     onClick={(e) => { if (e.target === e.currentTarget) setLight(null); }}
                 >
                     <div className="as-light__img">
+                        {/* Full-resolution original, loaded one at a time (#4489). */}
                         <img
                             src={items[light].imageUrl}
                             alt={items[light].prompt || "B-Roll"}
                             style={{ width: "100%", height: "100%", objectFit: "contain" }}
+                            decoding="async"
                         />
                     </div>
                     <button className="as-light__close" onClick={() => setLight(null)} aria-label="Close">

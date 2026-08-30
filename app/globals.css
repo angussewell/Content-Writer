@@ -3429,3 +3429,35 @@ body::before {
   .tt-segment__visual { grid-column: 1 / -1; padding-top: 9px; border-top: 1px solid color-mix(in oklab, var(--retention-color) 22%, var(--rule-2)); }
   .tt-context { grid-template-columns: 1fr; }
 }
+
+/* Persistent save-failure banner (#4110). A toast fades; this does not, so a
+   dropped title/hook/intro write cannot go unnoticed on a phone. */
+.cw-savealert {
+  /* Sticks just under the 60px header: a failure part-way down a long script
+     has to stay on screen, not sit at the top of the document unseen. */
+  position: sticky; top: 60px; z-index: 15;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 0 0 24px; padding: 12px 14px;
+  border: 1px solid var(--accent); border-radius: 8px;
+  background: var(--accent-soft); color: var(--accent-ink);
+  font-family: var(--sans); font-size: 14px; line-height: 1.5;
+  box-shadow: 0 10px 24px -18px rgba(40, 30, 15, 0.5);
+}
+.cw-savealert__dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent); flex: none;
+  /* Sit on the first line of text rather than centring against the wrapped block. */
+  align-self: flex-start; margin-top: 6px;
+}
+.cw-savealert__text { flex: 1 1 220px; min-width: 0; }
+.cw-savealert__btn {
+  flex: none; padding: 7px 14px; border-radius: 6px;
+  border: 1px solid var(--accent); background: var(--accent); color: var(--paper);
+  font-family: var(--sans); font-size: 13px; font-weight: 500; cursor: pointer;
+}
+.cw-savealert__btn:hover { opacity: .88; }
+
+@media (max-width: 720px) {
+  .cw-savealert { margin-bottom: 18px; }
+  .cw-savealert__btn { width: 100%; }
+}

@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import Link from "next/link";
 import { createScript } from "./actions";
 import { Topbar } from "@/components/Topbar";
+import { getWorkspaceTabs, resolveTab, statusLabel, ALL_TAB } from "@/lib/workspaceTabs";
 
 function formatDate(date: Date | string) {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(date));
@@ -42,17 +43,13 @@ export default async function Dashboard({
   searchParams: Promise<{ tab?: string; feedback?: string; sort?: string }>;
 }) {
   const { tab, feedback: feedbackFilter, sort = "recent" } = await searchParams;
-  const currentTab = tab || "write";
 
-  // Counts for all tabs
-  const countsResult = await db.execute(sql`
-    SELECT
-      COUNT(*) FILTER (WHERE status = 'draft') AS write_count,
-      COUNT(*) FILTER (WHERE status = 'filmed') AS edit_count,
-      COUNT(*) FILTER (WHERE status IN ('done', 'archived')) AS archive_count
-    FROM scripts
-  `);
-  const counts = countsResult.rows[0] as { write_count: number; edit_count: number; archive_count: number };
+  // Tabs (and therefore the status filter) come straight from the distinct
+  // values of scripts.status (#4044) — no hardcoded write/edit/archive mapping.
+  const { tabs: tabsMeta, total } = await getWorkspaceTabs();
+  const statuses = tabsMeta.filter((t) => t.id !== ALL_TAB).map((t) => t.id);
+  const currentTab = resolveTab(tab, statuses);
+  const currentCount = tabsMeta.find((t) => t.id === currentTab)?.count ?? 0;
 
   const ideasCountResult = await db.execute(sql`
     SELECT COUNT(*)::int AS fresh
@@ -67,13 +64,7 @@ export default async function Dashboard({
   `).catch(() => ({ rows: [{ c: 0 }] }));
   const metricsCount = (metricsCountRes.rows[0] as { c: number }).c;
 
-  // Scripts for current tab
-  const statusFilter =
-    currentTab === "write"
-      ? sql`s.status = 'draft'`
-      : currentTab === "edit"
-      ? sql`s.status = 'filmed'`
-      : sql`s.status IN ('done', 'archived')`;
+  const statusFilter = currentTab === ALL_TAB ? sql`TRUE` : sql`s.status = ${currentTab}`;
 
   const feedbackClause =
     feedbackFilter === "1"
@@ -111,30 +102,40 @@ export default async function Dashboard({
   `);
   const scripts = result.rows as Script[];
 
-  const tabsMeta = [
-    { id: "write", label: "Write", count: counts.write_count },
-    { id: "edit", label: "Edit", count: counts.edit_count },
-    { id: "archive", label: "Archive", count: counts.archive_count },
-  ];
-
+  // Copy per status. Any status without an entry falls back to a generic
+  // heading built from the status name, so a new status still reads properly.
   const headings: Record<string, { eyebrow: string; title: string; sub: string }> = {
-    write: {
+    [ALL_TAB]: {
+      eyebrow: "Workspace",
+      title: "Every script",
+      sub: `${total} script${total === 1 ? "" : "s"} across every status.`,
+    },
+    draft: {
       eyebrow: "Workspace",
       title: "Drafts in motion",
-      sub: `${counts.write_count} script${counts.write_count === 1 ? "" : "s"} in flight.`,
+      sub: `${currentCount} script${currentCount === 1 ? "" : "s"} in flight.`,
     },
-    edit: {
+    filmed: {
       eyebrow: "Workspace",
       title: "Filmed. Awaiting polish.",
       sub: "Captions, cuts, and final reads before publish.",
     },
-    archive: {
+    done: {
+      eyebrow: "Workspace",
+      title: "Done and shipped",
+      sub: `${currentCount} script${currentCount === 1 ? "" : "s"} that made it out.`,
+    },
+    archived: {
       eyebrow: "Workspace",
       title: "The archive",
-      sub: "Everything published, plus the things you let go.",
+      sub: "The ones you let go.",
     },
   };
-  const heading = headings[currentTab] ?? headings.write;
+  const heading = headings[currentTab] ?? {
+    eyebrow: "Workspace",
+    title: statusLabel(currentTab),
+    sub: `${currentCount} script${currentCount === 1 ? "" : "s"}.`,
+  };
 
   return (
     <>
@@ -142,7 +143,7 @@ export default async function Dashboard({
         ideasCount={ideasCount}
         metricsCount={metricsCount}
         activeTab={currentTab}
-        workspaceTabs={tabsMeta.map((t) => ({ id: t.id, label: t.label, count: t.count, href: `/?tab=${t.id}` }))}
+        workspaceTabs={tabsMeta}
       />
 
       {/* Main */}
@@ -185,8 +186,8 @@ export default async function Dashboard({
           <div className="grid grid--marginalia">
             {scripts.length === 0 ? (
               <div className="col-span-full" style={{ gridColumn: "1 / -1", padding: "4rem 0", textAlign: "center", color: "var(--ink-3)" }}>
-                <p style={{ marginBottom: "1rem" }}>No scripts in {currentTab}.</p>
-                {currentTab === "write" && (
+                <p style={{ marginBottom: "1rem" }}>No {currentTab === ALL_TAB ? "" : `${currentTab} `}scripts yet.</p>
+                {(currentTab === "draft" || currentTab === ALL_TAB) && (
                   <form action={createScript} style={{ display: "inline" }}>
                     <button type="submit" style={{ textDecoration: "underline", background: "none", border: "none", cursor: "pointer", color: "var(--ink-2)", fontFamily: "var(--sans)" }}>
                       Create one
@@ -204,7 +205,7 @@ export default async function Dashboard({
                       <aside className="marg__aside">
                         <div className="marg__date">{formatDate(script.created_at)}</div>
                         <div className="marg__spacer" />
-                        <div className="marg__draft">{script.status === "draft" ? "Draft" : script.status === "filmed" ? "Filmed" : "Done"}</div>
+                        <div className="marg__draft">{statusLabel(script.status)}</div>
                       </aside>
                       <div className="marg__body">
                         <h2 className="card__title card__title--serif">
@@ -256,7 +257,10 @@ export default async function Dashboard({
           <footer className="footer">
             <span className="footer__line" />
             <span className="footer__txt">
-              Reel Scripter — {counts.write_count} draft{counts.write_count === 1 ? "" : "s"}, {counts.edit_count} edit{counts.edit_count === 1 ? "" : "s"}, {counts.archive_count} in the archive.
+              Reel Scripter — {tabsMeta
+                .filter((t) => t.id !== ALL_TAB)
+                .map((t) => `${t.count} ${t.id}`)
+                .join(", ")}.
             </span>
           </footer>
         </div>

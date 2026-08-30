@@ -87,6 +87,9 @@ const SparkIcon = () => (
     </svg>
 );
 /* ── Status colors ── */
+/** Idle time before a title/intro edit is written back (#4110). */
+const AUTOSAVE_DELAY_MS = 900;
+
 const STATUS_COLORS: Record<string, string> = {
     draft: "#c69a3b",
     filmed: "#5b7a4a",
@@ -110,9 +113,20 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
     const [activeSuggestion, setActiveSuggestion] = useState<{ introId: string | null; type: "hook" | "intro" | null; text: string }>({ introId: null, type: null, text: "" });
     const router = useRouter();
 
+    // Title + intros used to save ONLY on an explicit tap or Cmd-S (#4110).
+    // Dirty text lived in React state until then, so when mobile Safari froze or
+    // evicted the backgrounded tab the edit vanished without ever having been
+    // sent — no request, therefore no error, therefore silence. These refs back
+    // a debounced autosave plus a flush when the page is going away.
+    const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const dataRef = useRef(data);
+    const dirtyRef = useRef(false);
+    useEffect(() => { dataRef.current = data; }, [data]);
+
     const markMetadataDirty = useCallback(() => {
         metadataVersionRef.current += 1;
         if (saveResetRef.current) clearTimeout(saveResetRef.current);
+        dirtyRef.current = true;
         setMetadataSaveState("dirty");
     }, []);
 
@@ -138,17 +152,20 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
     const onScreenCount = lineStats.cues;
     const openFeedbackCount = (data.feedback || []).filter((f) => !f.addressedAt).length;
 
-    const handleSave = useCallback(() => {
+    const runSave = useCallback((options: { silent?: boolean } = {}) => {
         const savingVersion = metadataVersionRef.current;
+        if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
         if (saveResetRef.current) clearTimeout(saveResetRef.current);
+        const snapshot = dataRef.current;
+        dirtyRef.current = false;
         setMetadataSaveState("saving");
         startTransition(async () => {
             try {
                 // Body is no longer sent — lines auto-save themselves (decision #118).
-                await updateScript(data.id, {
-                    title: data.title,
-                    intros: data.intros,
-                    contextItems: data.contextItems || [],
+                await updateScript(snapshot.id, {
+                    title: snapshot.title,
+                    intros: snapshot.intros,
+                    contextItems: snapshot.contextItems || [],
                 });
                 setData((prev) => ({
                     ...prev,
@@ -158,16 +175,75 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                     setMetadataSaveState("saved");
                     saveResetRef.current = setTimeout(() => setMetadataSaveState("idle"), 1800);
                 } else {
+                    // Edited again mid-flight; the debounce will pick the newer text up.
+                    dirtyRef.current = true;
                     setMetadataSaveState("dirty");
                 }
-                toast.success("Saved");
+                if (!options.silent) toast.success("Saved");
                 router.refresh();
             } catch {
+                // The edit is still in state and still dirty, so a later autosave
+                // or an explicit retry can pick it up.
+                dirtyRef.current = true;
                 setMetadataSaveState("error");
-                toast.error("Failed to save");
+                toast.error("Couldn't save — your changes are still here. Tap Retry save.");
             }
         });
-    }, [data, router]);
+    }, [router]);
+
+    const handleSave = useCallback(() => runSave(), [runSave]);
+
+    // Leaving a field writes immediately rather than waiting out the debounce —
+    // on mobile a blur is usually the keyboard closing, which often precedes an
+    // app switch.
+    const handleFieldBlur = useCallback(() => {
+        if (dirtyRef.current) runSave({ silent: true });
+    }, [runSave]);
+
+    // Debounced autosave. Any edit to the title, a hook, an intro or a context
+    // item schedules a write, so nothing depends on remembering to tap Save.
+    useEffect(() => {
+        if (metadataSaveState !== "dirty") return;
+        if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = setTimeout(() => runSave({ silent: true }), AUTOSAVE_DELAY_MS);
+        return () => {
+            if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+        };
+    }, [metadataSaveState, data, runSave]);
+
+    // Last-gasp flush. Once the tab is hidden a server action in flight can be
+    // dropped, so pending text goes out over a keepalive fetch instead — the
+    // browser is obliged to finish that even while tearing the page down.
+    useEffect(() => {
+        const flush = () => {
+            if (!dirtyRef.current) return;
+            const snapshot = dataRef.current;
+            dirtyRef.current = false;
+            if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+            try {
+                void fetch(`/api/scripts/${snapshot.id}/metadata`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        title: snapshot.title,
+                        intros: snapshot.intros,
+                        contextItems: snapshot.contextItems || [],
+                    }),
+                    keepalive: true,
+                }).catch(() => { dirtyRef.current = true; });
+            } catch {
+                dirtyRef.current = true;
+            }
+        };
+        const onVisibility = () => { if (document.visibilityState === "hidden") flush(); };
+        // beforeunload does not fire reliably on iOS; pagehide does.
+        document.addEventListener("visibilitychange", onVisibility);
+        window.addEventListener("pagehide", flush);
+        return () => {
+            document.removeEventListener("visibilitychange", onVisibility);
+            window.removeEventListener("pagehide", flush);
+        };
+    }, []);
 
     // ⌘S to save
     useEffect(() => {
@@ -254,6 +330,7 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
 
     useEffect(() => () => {
         if (saveResetRef.current) clearTimeout(saveResetRef.current);
+        if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     }, []);
 
     return (
@@ -358,6 +435,20 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
             {/* ── Stage ── */}
             <div className="cw-stage">
                 <main className="cw-doc">
+                    {/* A failed save has to stay on screen — a toast that fades is
+                        how hooks went missing unnoticed (#4110). */}
+                    {metadataSaveState === "error" && (
+                        <div className="cw-savealert" role="alert">
+                            <span className="cw-savealert__dot" aria-hidden="true" />
+                            <span className="cw-savealert__text">
+                                Your last change didn&rsquo;t save. It&rsquo;s still here on this screen — retry before you leave.
+                            </span>
+                            <button type="button" className="cw-savealert__btn" onClick={handleSave}>
+                                Retry save
+                            </button>
+                        </div>
+                    )}
+
                     {/* Title block */}
                     <section className="cw-titleblock">
                         <div className="cw-titleblock-meta">
@@ -391,6 +482,7 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                                 markMetadataDirty();
                                 setData({ ...data, title: e.target.value });
                             }}
+                            onBlur={handleFieldBlur}
                             placeholder="Untitled script"
                             autoCapitalize="sentences"
                             autoCorrect="on"
@@ -436,6 +528,7 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                                                 className="cw-intro-hook"
                                                 value={intro.titleHook}
                                                 onChange={(e) => updateIntro(intro.id, "titleHook", e.target.value)}
+                                                onBlur={handleFieldBlur}
                                                 placeholder="A line that stops the scroll…"
                                                 autoCapitalize="sentences"
                                                 autoCorrect="on"
@@ -462,6 +555,7 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                                                 className="cw-intro-verbal"
                                                 value={intro.verbalIntro}
                                                 onChange={(e) => updateIntro(intro.id, "verbalIntro", e.target.value)}
+                                                onBlur={handleFieldBlur}
                                                 placeholder="What you actually say to camera…"
                                                 autoCapitalize="sentences"
                                                 autoCorrect="on"
