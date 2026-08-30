@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- remote generated assets are intentionally rendered at their source URLs */
 
-import { useState, useEffect, useTransition } from "react";
+import { useState, useEffect, useRef, useTransition } from "react";
 import { generateScriptImage, deleteScriptImage } from "@/app/actions";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -76,6 +76,20 @@ export function AssetsTrigger({ onClick, count }: { onClick: () => void; count: 
     );
 }
 
+/**
+ * Cards rendered on first paint, then per scroll batch (#4489).
+ *
+ * The overlay sets backdrop-filter, which forces its whole subtree into
+ * compositing, so every card becomes its own layer. A layer's backing store is
+ * sized by DISPLAY size x devicePixelRatio squared — about 5 MB per card at 3x —
+ * so 46 cards is ~240 MB allocated at first paint and the tab is killed within
+ * a second. That cost is independent of source resolution, which is why serving
+ * smaller derivatives alone did not fix the crash. Keeping only a window of
+ * cards in the DOM caps layers, decodes and requests together.
+ */
+const INITIAL_CARDS = 12;
+const CARD_BATCH = 12;
+
 export function AssetsOverlay({ scriptId, images, onClose }: AssetsOverlayProps) {
     const [filter, setFilter] = useState<"all" | "motion" | "still">("all");
     const [selected, setSelected] = useState(new Set<string>());
@@ -146,6 +160,26 @@ export function AssetsOverlay({ scriptId, images, onClose }: AssetsOverlayProps)
     };
 
     const items = images;
+    const [visibleCount, setVisibleCount] = useState(INITIAL_CARDS);
+    const bodyRef = useRef<HTMLDivElement | null>(null);
+
+    // Grow the window as the scroller nears the end. A plain scroll listener
+    // rather than IntersectionObserver: no element-root edge cases, and the
+    // check also runs on mount so a short gallery fills itself in.
+    useEffect(() => {
+        const node = bodyRef.current;
+        if (!node) return;
+        const check = () => {
+            if (node.scrollTop + node.clientHeight >= node.scrollHeight - 600) {
+                setVisibleCount((c) => (c >= items.length ? c : Math.min(c + CARD_BATCH, items.length)));
+            }
+        };
+        check();
+        node.addEventListener("scroll", check, { passive: true });
+        return () => node.removeEventListener("scroll", check);
+    }, [visibleCount, items.length]);
+
+    const shown = items.slice(0, visibleCount);
 
     return (
         <div
@@ -172,7 +206,7 @@ export function AssetsOverlay({ scriptId, images, onClose }: AssetsOverlayProps)
                     </div>
                 </header>
 
-                <div className="as-modal__body">
+                <div className="as-modal__body" ref={bodyRef}>
                     {/* Generate row */}
                     <div className="as-generate">
                         <input
@@ -209,7 +243,7 @@ export function AssetsOverlay({ scriptId, images, onClose }: AssetsOverlayProps)
                         {items.length === 0 ? (
                             <div className="as-empty">No assets yet. Generate your first B-Roll above.</div>
                         ) : (
-                            items.map((img, idx) => (
+                            shown.map((img, idx) => (
                                 <article
                                     key={img.id}
                                     className={"as-card" + (selected.has(img.id) ? " is-selected" : "")}
@@ -251,6 +285,13 @@ export function AssetsOverlay({ scriptId, images, onClose }: AssetsOverlayProps)
                             ))
                         )}
                     </div>
+
+                    {/* Sentinel: pulls in the next batch as it nears the viewport. */}
+                    {visibleCount < items.length && (
+                        <div className="as-more">
+                            Loading {items.length - visibleCount} more…
+                        </div>
+                    )}
                 </div>
             </div>
 

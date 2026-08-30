@@ -3461,3 +3461,45 @@ body::before {
   .cw-savealert { margin-bottom: 18px; }
   .cw-savealert__btn { width: 100%; }
 }
+
+/* Asset gallery on touch (#4489).
+   The overlay's backdrop-filter forces its whole subtree into compositing, so
+   every card became its own layer with a backing store sized by display size x
+   dpr^2 — ~5MB a card at 3x, ~240MB across a 46-image gallery, allocated at
+   first paint. That, not source resolution, is what killed the tab. The card
+   window in AssetsOverlay caps how many exist; these rules remove the pressure
+   that made each one expensive. */
+@media (max-width: 720px) {
+  .as-overlay {
+    /* A solid scrim instead of a live blur: no forced compositing of the subtree. */
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+    background: color-mix(in oklab, var(--ink) 82%, transparent);
+    padding: 16px;
+  }
+  .as-modal { animation: none; }
+  .as-modal__head { grid-template-columns: 1fr auto; gap: 10px; padding: 14px 16px; }
+  .as-modal__actions { grid-column: 2; }
+  .as-modal__filters { grid-column: 1 / -1; grid-row: 2; justify-self: start; }
+  .as-modal__body { padding: 16px; }
+  .as-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+
+  /* Hover lift promotes a layer per card on touch, where it can never fire. */
+  .as-card { transition: none; }
+  .as-card:hover { transform: none; box-shadow: none; }
+  /* Off-screen cards skip rendering entirely; the size keeps the scrollbar honest. */
+  .as-card { content-visibility: auto; contain-intrinsic-size: auto 260px; }
+
+  /* At two columns the caption has ~125px: clamp it to two lines and drop the
+     ratio chip, which reads 9:16 on every asset anyway. */
+  .as-card__meta { padding: 8px 10px; font-size: 11px; }
+  .as-card__meta > span:last-child { display: none; }
+  .as-card__name {
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden; line-height: 1.35;
+  }
+}
+
+.as-more {
+  padding: 20px 0 4px; text-align: center;
+  font-family: var(--sans); font-size: 13px; color: var(--ink-3);
+}
