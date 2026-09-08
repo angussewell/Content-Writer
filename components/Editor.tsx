@@ -3,7 +3,7 @@
 import { useState, useTransition, useMemo, useEffect, useCallback, useRef } from "react";
 import TextareaAutosize from "react-textarea-autosize";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { updateScript, updateScriptStatus } from "@/app/actions";
 import SuggestionDrawer from "./SuggestionDrawer";
@@ -103,7 +103,16 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
     const [data, setData] = useState<ScriptData>(initialData);
     const [isPending, startTransition] = useTransition();
     const [statusOpen, setStatusOpen] = useState(false);
-    const [assetsOpen, setAssetsOpen] = useState(false);
+    const searchParams = useSearchParams();
+    const assetsOpen = searchParams.get("assets") === "1";
+    const setAssetsOpen = (open: boolean) => {
+        const url = new URL(window.location.href);
+        if (open) url.searchParams.set("assets", "1");
+        else url.searchParams.delete("assets");
+        // Keep the gallery open across browser downloads / phone tab restores.
+        // Native history updates Next's search params without refreshing data.
+        window.history.replaceState(null, "", url);
+    };
     const [feedbackOpen, setFeedbackOpen] = useState(false);
     const [contextOpen, setContextOpen] = useState(false);
     const [idCopied, setIdCopied] = useState(false);
@@ -370,7 +379,7 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                     <div className="cw-header-actions">
                         <AssetsTrigger
                             onClick={() => setAssetsOpen(true)}
-                            count={data.scriptImages?.length ?? 0}
+                            count={initialData.scriptImages?.length ?? 0}
                         />
 
                         <button
@@ -390,6 +399,7 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
                         <div className="cw-status-wrap">
                             <button
                                 className="cw-status"
+                                aria-label={`Status: ${data.status}`}
                                 onClick={() => setStatusOpen((o) => !o)}
                                 onBlur={() => setTimeout(() => setStatusOpen(false), 120)}
                             >
@@ -628,7 +638,7 @@ export default function Editor({ initialData }: { initialData: ScriptData }) {
             {assetsOpen && (
                 <AssetsOverlay
                     scriptId={data.id}
-                    images={data.scriptImages || []}
+                    images={initialData.scriptImages || []}
                     onClose={() => setAssetsOpen(false)}
                 />
             )}

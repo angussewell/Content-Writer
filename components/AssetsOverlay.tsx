@@ -1,11 +1,11 @@
 "use client";
-/* eslint-disable @next/next/no-img-element -- remote generated assets are intentionally rendered at their source URLs */
+/* eslint-disable @next/next/no-img-element -- originals are required for native long-press image saving */
 
 import { useState, useEffect, useRef, useTransition } from "react";
+import { ChevronLeft, ChevronRight, Download, Images, Plus, X } from "lucide-react";
 import { generateScriptImage, deleteScriptImage } from "@/app/actions";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { cloudinaryThumb, THUMB_WIDTH, THUMB_HEIGHT } from "@/lib/cloudinary";
 
 interface ScriptImage {
     id: string;
@@ -20,329 +20,245 @@ interface AssetsOverlayProps {
     onClose: () => void;
 }
 
-const DownloadIcon = () => (
-    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-        <path d="M7 10l5 5 5-5" />
-        <path d="M12 15V3" />
-    </svg>
-);
-
-const CloseIcon = ({ size = 15 }: { size?: number }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-        <path d="M18 6L6 18M6 6l12 12" />
-    </svg>
-);
-
-const CheckIcon = () => (
-    <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
-        <path d="M20 6L9 17l-5-5" />
-    </svg>
-);
-
-const SparkIcon = () => (
-    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8" />
-    </svg>
-);
-
-const PrevIcon = () => (
-    <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-        <path d="M15 18l-6-6 6-6" />
-    </svg>
-);
-
-const NextIcon = () => (
-    <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-        <path d="M9 18l6-6-6-6" />
-    </svg>
-);
-
-const ImageIcon = () => (
-    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="3" width="18" height="18" rx="2" />
-        <circle cx="8.5" cy="8.5" r="1.5" />
-        <path d="M21 15l-5-5L5 21" />
-    </svg>
-);
-
 export function AssetsTrigger({ onClick, count }: { onClick: () => void; count: number }) {
     return (
-        <button className="as-trigger" onClick={onClick} title="Open asset library">
-            <ImageIcon />
+        <button className="as-trigger" onClick={onClick} aria-label={`Open assets (${count})`}>
+            <Images size={16} aria-hidden="true" />
             <span className="as-trigger__label">Assets</span>
             <span className="as-trigger__count">{count}</span>
         </button>
     );
 }
 
-/**
- * Cards rendered on first paint, then per scroll batch (#4489).
- *
- * The overlay sets backdrop-filter, which forces its whole subtree into
- * compositing, so every card becomes its own layer. A layer's backing store is
- * sized by DISPLAY size x devicePixelRatio squared — about 5 MB per card at 3x —
- * so 46 cards is ~240 MB allocated at first paint and the tab is killed within
- * a second. That cost is independent of source resolution, which is why serving
- * smaller derivatives alone did not fix the crash. Keeping only a window of
- * cards in the DOM caps layers, decodes and requests together.
- */
-const INITIAL_CARDS = 12;
-const CARD_BATCH = 12;
+function OriginalImage({ image, number, canRetry = false }: { image: ScriptImage; number: number; canRetry?: boolean }) {
+    const [failed, setFailed] = useState(false);
+    return failed ? (
+        <div className="as-image-error" role="status">
+            <span>Image couldn’t load.</span>
+            {canRetry && <button className="as-action" onClick={() => setFailed(false)}>Retry</button>}
+        </div>
+    ) : (
+        <img
+            src={image.imageUrl}
+            alt={`Asset ${number}`}
+            width={1080}
+            height={1920}
+            decoding="async"
+            onError={() => setFailed(true)}
+        />
+    );
+}
+
+function DownloadLink({ id, number }: { id: string; number: number }) {
+    // A same-origin attachment preserves the page and avoids cross-origin blob
+    // navigation / immediate object-URL revocation on Safari.
+    return (
+        <a className="as-download" href={`/api/assets/${id}/download`} download aria-label={`Download asset ${number}`}>
+            <Download size={16} aria-hidden="true" />
+            <span>Download</span>
+        </a>
+    );
+}
 
 export function AssetsOverlay({ scriptId, images, onClose }: AssetsOverlayProps) {
-    const [filter, setFilter] = useState<"all" | "motion" | "still">("all");
-    const [selected, setSelected] = useState(new Set<string>());
-    const [light, setLight] = useState<number | null>(null);
+    const [lightId, setLightId] = useState<string | null>(null);
     const [prompt, setPrompt] = useState("");
     const [isPending, startTransition] = useTransition();
+    const [nearby, setNearby] = useState<Set<string>>(new Set());
+    const [deleted, setDeleted] = useState<Set<string>>(new Set());
+    const bodyRef = useRef<HTMLDivElement>(null);
+    const overlayRef = useRef<HTMLDivElement>(null);
+    const viewerRef = useRef<HTMLDivElement>(null);
+    const lastImageRef = useRef<HTMLAnchorElement | null>(null);
     const router = useRouter();
+    const items = images.filter((image) => !deleted.has(image.id));
+    const light = items.findIndex((image) => image.id === lightId);
+    const current = items[light];
+    const storageKey = `assets-scroll:${scriptId}`;
 
     useEffect(() => {
-        const onKey = (e: KeyboardEvent) => {
-            if (e.key === "Escape") {
-                if (light !== null) setLight(null);
+        const previousFocus = document.activeElement as HTMLElement | null;
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+        overlayRef.current?.querySelector<HTMLButtonElement>(".as-modal__close")?.focus();
+        return () => {
+            document.body.style.overflow = previousOverflow;
+            previousFocus?.focus();
+        };
+    }, []);
+
+    const viewingImage = !!current;
+    useEffect(() => {
+        if (viewingImage) viewerRef.current?.querySelector<HTMLButtonElement>(".as-light__close")?.focus();
+        else if (lastImageRef.current?.isConnected) lastImageRef.current.focus({ preventScroll: true });
+        else overlayRef.current?.querySelector<HTMLButtonElement>(".as-modal__close")?.focus({ preventScroll: true });
+    }, [viewingImage]);
+
+    useEffect(() => {
+        const onKey = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                if (lightId) setLightId(null);
                 else onClose();
             }
-            if (e.key === "ArrowLeft" && light !== null && light > 0) setLight(light - 1);
-            if (e.key === "ArrowRight" && light !== null && light < images.length - 1) setLight(light + 1);
+            if (event.key === "ArrowLeft" && light > 0) setLightId(items[light - 1].id);
+            if (event.key === "ArrowRight" && light >= 0 && light < items.length - 1) setLightId(items[light + 1].id);
+            if (event.key !== "Tab") return;
+            const root = current ? viewerRef.current : overlayRef.current?.querySelector(".as-modal");
+            const controls = Array.from(root?.querySelectorAll<HTMLElement>("button:not(:disabled), a[href], input, summary") ?? [])
+                .filter((node) => node.getClientRects().length > 0);
+            const first = controls[0];
+            const last = controls[controls.length - 1];
+            if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
         };
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
-    }, [light, onClose, images.length]);
+    }, [lightId, light, current, items, onClose]);
 
-    const toggleSel = (id: string) => {
-        const next = new Set(selected);
-        if (next.has(id)) next.delete(id); else next.add(id);
-        setSelected(next);
-    };
+    useEffect(() => {
+        const body = bodyRef.current;
+        if (!body) return;
+        try { body.scrollTop = Number(sessionStorage.getItem(storageKey)) || 0; } catch { /* storage may be disabled */ }
+        const remember = () => {
+            try { sessionStorage.setItem(storageKey, String(body.scrollTop)); } catch { /* scrolling still works */ }
+        };
+        body.addEventListener("scroll", remember, { passive: true });
+        window.addEventListener("pagehide", remember);
+        return () => {
+            remember();
+            body.removeEventListener("scroll", remember);
+            window.removeEventListener("pagehide", remember);
+        };
+    }, [storageKey]);
 
-    const handleDownload = async (url: string, id: string) => {
-        try {
-            const response = await fetch(url);
-            const blob = await response.blob();
-            const blobUrl = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = blobUrl;
-            a.download = `b-roll-${id}.png`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(blobUrl);
-        } catch {
-            window.open(url, "_blank");
-        }
-    };
+    useEffect(() => {
+        const body = bodyRef.current;
+        if (!body) return;
+        // Keep lightweight, fixed-size card shells for scrolling, but mount
+        // ORIGINAL <img>s only near the viewport. Lazy-loading alone accumulates
+        // decoded originals and can kill a many-image iPhone tab (#4489).
+        // Never display a resized src/srcset: native Save Image saves currentSrc.
+        const observer = new IntersectionObserver((entries) => {
+            setNearby((previous) => {
+                const next = new Set(previous);
+                for (const entry of entries) {
+                    const id = (entry.target as HTMLElement).dataset.imageId!;
+                    if (entry.isIntersecting) next.add(id); else next.delete(id);
+                }
+                return next;
+            });
+        }, { root: body, rootMargin: "160px 0px" });
+        body.querySelectorAll("[data-image-id]").forEach((node) => observer.observe(node));
+        return () => observer.disconnect();
+    }, [images, deleted]);
 
     const handleDelete = (id: string) => {
+        if (!confirm("Delete this image?")) return;
         startTransition(async () => {
-            const result = await deleteScriptImage(id);
-            if (result.success) {
-                toast.success("Deleted");
+            try {
+                const result = await deleteScriptImage(id);
+                if (!result.success) { toast.error("Failed to delete image"); return; }
+                setDeleted((previous) => new Set([...previous, id]));
+                setLightId(null);
+                toast.success("Image deleted");
                 router.refresh();
-            } else {
-                toast.error("Failed to delete");
-            }
+            } catch { toast.error("Failed to delete image"); }
         });
     };
 
     const handleGenerate = () => {
+        if (isPending) return;
         startTransition(async () => {
-            const result = await generateScriptImage(scriptId, prompt);
-            if (result.success) {
-                toast.success("Generation started…");
-                setPrompt("");
-                router.refresh();
-            } else {
-                toast.error(result.error || "Failed to generate");
-            }
+            try {
+                const result = await generateScriptImage(scriptId, prompt);
+                if (result.success) {
+                    toast.success("Generation started…");
+                    setPrompt("");
+                    router.refresh();
+                } else { toast.error(result.error || "Failed to generate"); }
+            } catch { toast.error("Failed to generate"); }
         });
     };
 
-    const items = images;
-    const [visibleCount, setVisibleCount] = useState(INITIAL_CARDS);
-    const bodyRef = useRef<HTMLDivElement | null>(null);
-
-    // Grow the window as the scroller nears the end. A plain scroll listener
-    // rather than IntersectionObserver: no element-root edge cases, and the
-    // check also runs on mount so a short gallery fills itself in.
-    useEffect(() => {
-        const node = bodyRef.current;
-        if (!node) return;
-        const check = () => {
-            if (node.scrollTop + node.clientHeight >= node.scrollHeight - 600) {
-                setVisibleCount((c) => (c >= items.length ? c : Math.min(c + CARD_BATCH, items.length)));
-            }
-        };
-        check();
-        node.addEventListener("scroll", check, { passive: true });
-        return () => node.removeEventListener("scroll", check);
-    }, [visibleCount, items.length]);
-
-    const shown = items.slice(0, visibleCount);
-
     return (
-        <div
-            className="as-overlay"
-            onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-        >
-            <div className="as-modal" role="dialog" aria-label="Asset library">
+        <div className="as-overlay" ref={overlayRef} onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+            <div className="as-modal" role="dialog" aria-modal="true" aria-label="Asset library" inert={!!current}>
                 <header className="as-modal__head">
                     <div className="as-modal__title">
                         <h2>Assets</h2>
-                        <span className="as-modal__title-meta">{images.length} files</span>
+                        <span className="as-modal__title-meta">{items.length} images</span>
                     </div>
-
-                    <div className="as-modal__filters">
-                        <button className={"as-filter" + (filter === "all" ? " is-active" : "")} onClick={() => setFilter("all")}>All</button>
-                        <button className={"as-filter" + (filter === "motion" ? " is-active" : "")} onClick={() => setFilter("motion")}>Motion</button>
-                        <button className={"as-filter" + (filter === "still" ? " is-active" : "")} onClick={() => setFilter("still")}>Stills</button>
-                    </div>
-
-                    <div className="as-modal__actions">
-                        <button className="as-modal__close" onClick={onClose} aria-label="Close">
-                            <CloseIcon size={15} />
-                        </button>
-                    </div>
+                    <button className="as-modal__close" onClick={onClose} aria-label="Close assets"><X size={20} /></button>
                 </header>
-
                 <div className="as-modal__body" ref={bodyRef}>
-                    {/* Generate row */}
-                    <div className="as-generate">
-                        <input
-                            className="as-generate__input"
-                            placeholder="Prompt for new B-Roll…"
-                            value={prompt}
-                            onChange={(e) => setPrompt(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === "Enter") handleGenerate(); }}
-                        />
-                        <button
-                            className="as-generate__btn"
-                            onClick={handleGenerate}
-                            disabled={isPending}
-                            title="Generate B-Roll"
-                        >
-                            <SparkIcon />
-                            <span>{isPending ? "Generating…" : "Generate"}</span>
-                        </button>
-                    </div>
-
-                    {selected.size > 0 && (
-                        <div className="as-selbar">
-                            <div className="as-selbar__count">{selected.size} selected</div>
-                            <div className="as-selbar__actions">
-                                <button className="as-selbar__btn" onClick={() => setSelected(new Set())}>Clear</button>
-                                <button className="as-selbar__btn as-selbar__btn--primary">
-                                    Download {selected.size}
-                                </button>
-                            </div>
+                    <p className="as-hint">Hold an image to save it in full resolution. Tap to enlarge.</p>
+                    <details className="as-create">
+                        <summary><Plus size={16} aria-hidden="true" /> Generate images</summary>
+                        <div className="as-generate">
+                            <input
+                                className="as-generate__input"
+                                placeholder="Prompt for new B-Roll…"
+                                aria-label="Prompt for new B-Roll"
+                                value={prompt}
+                                onChange={(event) => setPrompt(event.target.value)}
+                                onKeyDown={(event) => { if (event.key === "Enter") handleGenerate(); }}
+                            />
+                            <button className="as-generate__btn" onClick={handleGenerate} disabled={isPending}>
+                                {isPending ? "Generating…" : "Generate"}
+                            </button>
                         </div>
-                    )}
-
+                    </details>
                     <div className="as-grid">
-                        {items.length === 0 ? (
-                            <div className="as-empty">No assets yet. Generate your first B-Roll above.</div>
-                        ) : (
-                            shown.map((img, idx) => (
-                                <article
-                                    key={img.id}
-                                    className={"as-card" + (selected.has(img.id) ? " is-selected" : "")}
-                                    onClick={() => setLight(idx)}
+                        {items.length === 0 ? <div className="as-empty">No assets yet. Open Generate images to create your first B-Roll.</div> : items.map((image, index) => (
+                            <article key={image.id} className="as-card">
+                                <a
+                                    className="as-card__thumb"
+                                    data-image-id={image.id}
+                                    href={image.imageUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    aria-label={`Enlarge asset ${index + 1}`}
+                                    onClick={(event) => {
+                                        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                                        event.preventDefault();
+                                        lastImageRef.current = event.currentTarget;
+                                        setLightId(image.id);
+                                    }}
                                 >
-                                    <div className="as-card__thumb">
-                                        {/* Thumbnail derivative, not the 1080x1920 original (#4489).
-                                            Explicit width/height give the browser a box before load, which
-                                            is what makes loading="lazy" actually defer off-screen cards. */}
-                                        <img
-                                            src={cloudinaryThumb(img.imageUrl)}
-                                            alt={img.prompt || "B-Roll"}
-                                            width={THUMB_WIDTH}
-                                            height={THUMB_HEIGHT}
-                                            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-                                            loading="lazy"
-                                            decoding="async"
-                                        />
-                                        <button
-                                            className="as-card__check"
-                                            onClick={(e) => { e.stopPropagation(); toggleSel(img.id); }}
-                                            aria-label="Select"
-                                        >
-                                            <CheckIcon />
-                                        </button>
-                                        <button
-                                            className="as-card__dl"
-                                            onClick={(e) => { e.stopPropagation(); handleDownload(img.imageUrl, img.id); }}
-                                            title="Download"
-                                        >
-                                            <DownloadIcon />
-                                        </button>
-                                    </div>
-                                    <div className="as-card__meta">
-                                        <span className="as-card__name">{img.prompt || `b-roll-${img.id.slice(0, 8)}`}</span>
-                                        <span>9:16</span>
-                                    </div>
-                                </article>
-                            ))
-                        )}
+                                    {!current && nearby.has(image.id) && <OriginalImage image={image} number={index + 1} />}
+                                </a>
+                                <div className="as-card__meta">
+                                    <span className="as-card__name">{String(index + 1).padStart(2, "0")}</span>
+                                    <DownloadLink id={image.id} number={index + 1} />
+                                </div>
+                            </article>
+                        ))}
                     </div>
-
-                    {/* Sentinel: pulls in the next batch as it nears the viewport. */}
-                    {visibleCount < items.length && (
-                        <div className="as-more">
-                            Loading {items.length - visibleCount} more…
-                        </div>
-                    )}
                 </div>
             </div>
-
-            {/* Lightbox */}
-            {light !== null && items[light] && (
-                <div
-                    className="as-light"
-                    onClick={(e) => { if (e.target === e.currentTarget) setLight(null); }}
-                >
-                    <div className="as-light__img">
-                        {/* Full-resolution original, loaded one at a time (#4489). */}
-                        <img
-                            src={items[light].imageUrl}
-                            alt={items[light].prompt || "B-Roll"}
-                            style={{ width: "100%", height: "100%", objectFit: "contain" }}
-                            decoding="async"
-                        />
-                    </div>
-                    <button className="as-light__close" onClick={() => setLight(null)} aria-label="Close">
-                        <CloseIcon size={16} />
-                    </button>
-                    {light > 0 && (
-                        <button className="as-light__nav as-light__nav--prev" onClick={() => setLight(light - 1)} aria-label="Previous">
-                            <PrevIcon />
-                        </button>
-                    )}
-                    {light < items.length - 1 && (
-                        <button className="as-light__nav as-light__nav--next" onClick={() => setLight(light + 1)} aria-label="Next">
-                            <NextIcon />
-                        </button>
-                    )}
-                    <div className="as-light__caption">
-                        <span>{items[light].prompt || "B-Roll"}</span>
-                        <span>·</span>
-                        <span>9:16</span>
-                        <span>·</span>
-                        <button
-                            className="as-light__dl"
-                            onClick={() => handleDownload(items[light].imageUrl, items[light].id)}
-                        >
-                            <DownloadIcon />
-                            <span>Download</span>
-                        </button>
-                        <button
-                            className="as-light__dl"
-                            onClick={() => handleDelete(items[light].id)}
-                            style={{ color: "var(--accent)" }}
-                        >
-                            <span>Delete</span>
-                        </button>
-                    </div>
+            {current && (
+                <div className="as-light" ref={viewerRef} role="dialog" aria-modal="true" aria-label={`Asset ${light + 1} of ${items.length}`}>
+                    <header className="as-light__head">
+                        <button className="as-light__close as-action" onClick={() => setLightId(null)} aria-label="Back to gallery"><ChevronLeft size={18} /> Gallery</button>
+                        <span className="as-light__count" aria-live="polite">{light + 1} / {items.length}</span>
+                        <DownloadLink id={current.id} number={light + 1} />
+                    </header>
+                    <div className="as-light__img"><OriginalImage key={current.id} image={current} number={light + 1} canRetry /></div>
+                    <footer className="as-light__foot">
+                        <div className="as-light__nav">
+                            <button className="as-action" disabled={light === 0} onClick={() => setLightId(items[light - 1].id)} aria-label="Previous image"><ChevronLeft size={20} /></button>
+                            <span>Hold image to save</span>
+                            <button className="as-action" disabled={light === items.length - 1} onClick={() => setLightId(items[light + 1].id)} aria-label="Next image"><ChevronRight size={20} /></button>
+                        </div>
+                        <details key={current.id} className="as-details">
+                            <summary>Image details</summary>
+                            <div className="as-details__body">
+                                <p>{current.prompt || "No generation prompt saved for this image."}</p>
+                                <a className="as-action" href={current.imageUrl} target="_blank" rel="noopener noreferrer">Open original</a>
+                                <button className="as-action as-delete" onClick={() => handleDelete(current.id)} disabled={isPending}>Delete image</button>
+                            </div>
+                        </details>
+                    </footer>
                 </div>
             )}
         </div>
