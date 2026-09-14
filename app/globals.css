@@ -3212,17 +3212,15 @@ body::before {
   line-height: 1.15; letter-spacing: -.015em;
 }
 .tt-retention__sub { max-width: 690px; margin: 0; color: var(--ink-3); font-size: 14px; line-height: 1.55; }
-.tt-legend { display: flex; align-items: center; gap: 8px; flex: none; color: var(--ink-4); font-size: 10.5px; }
-.tt-legend__scale {
-  width: 92px; height: 6px; border-radius: 999px;
-  background: linear-gradient(90deg, var(--retention-good), var(--retention-bad));
-}
+.tt-legend { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; color: var(--ink-2); font-size: 14px; }
+.tt-legend__better { color: var(--retention-good); }
+.tt-legend__worse { color: var(--retention-bad); }
 
 .tt-chartwrap { margin-top: 24px; padding: 8px 10px 0; border: 1px solid var(--rule-2); border-radius: 13px; background: var(--paper); }
 .tt-chart { display: block; width: 100%; height: 260px; overflow: visible; }
 .tt-chart__grid { stroke: var(--rule-2); stroke-width: 1; }
-.tt-chart__axis { fill: var(--ink-4); font-family: var(--mono); font-size: 9px; }
-.tt-chart__area { fill: var(--accent-soft); opacity: .7; }
+.tt-chart__axis { fill: var(--ink-2); font-family: var(--mono); font-size: 12px; }
+.tt-chart__baseline { fill: none; stroke: var(--ink-3); stroke-width: 1.5; stroke-dasharray: 5 5; vector-effect: non-scaling-stroke; }
 .tt-chart__line { fill: none; stroke: var(--accent); stroke-width: 2.5; vector-effect: non-scaling-stroke; }
 .tt-chart__focus { fill: var(--accent); opacity: .12; }
 
@@ -3231,40 +3229,40 @@ body::before {
   margin-top: 12px; overflow: hidden; border: 1px solid var(--hairline); border-radius: 11px; background: var(--hairline);
 }
 .tt-insight { min-width: 0; display: flex; flex-direction: column; gap: 5px; padding: 12px 14px; background: var(--paper); }
-.tt-insight strong { overflow: hidden; color: var(--ink-2); font-family: var(--serif); font-size: 14px; font-weight: 500; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.tt-insight strong { color: var(--ink-2); font-family: var(--serif); font-size: 18px; font-weight: 500; line-height: 1.4; }
+.tt-insight > span:last-child:not(:first-child) { color: var(--ink-2); font-size: 14px; line-height: 1.5; }
+.tt-insight--worst { grid-column: 1 / -1; }
 
 .tt-scripthead { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin: 30px 0 12px; }
 .tt-scripthead h3 { margin: 0; font-size: 13px; font-weight: 650; letter-spacing: .03em; text-transform: uppercase; }
-.tt-scripthead p { margin: 0; color: var(--ink-4); font-size: 11.5px; }
+.tt-scripthead p { margin: 0; color: var(--ink-2); font-size: 14px; }
 .tt-script { display: flex; flex-direction: column; gap: 7px; }
 .tt-segment {
   position: relative; width: 100%; display: grid;
   grid-template-columns: 86px minmax(0, 1.25fr) minmax(220px, .85fr); gap: 18px; align-items: start;
   overflow: hidden; padding: 16px 18px; text-align: left;
-  border: 1px solid color-mix(in oklab, var(--retention-color) 28%, var(--hairline)); border-radius: 12px;
-  background: color-mix(in oklab, var(--retention-color) 9%, var(--paper)); color: var(--ink);
+  border: none; border-radius: 12px 12px 0 0;
+  background: transparent; color: var(--ink);
   transition: transform .12s ease, border-color .12s ease, box-shadow .12s ease, background .12s ease;
 }
 .tt-segment:hover, .tt-segment--active {
-  transform: translateY(-1px); border-color: var(--retention-color);
-  background: color-mix(in oklab, var(--retention-color) 13%, var(--paper));
-  box-shadow: 0 7px 22px -18px var(--retention-color);
+  background: color-mix(in oklab, var(--retention-color) 8%, var(--paper));
 }
-.tt-segment:focus-visible { outline: 2px solid var(--retention-color); outline-offset: 2px; }
+.tt-segment:focus-visible { outline: 2px solid var(--retention-color); outline-offset: -3px; }
 .tt-segment__marker { position: absolute; inset: 0 auto 0 0; width: 5px; background: var(--retention-color); }
 .tt-segment__time, .tt-segment__spoken, .tt-segment__visual { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-.tt-segment__time strong { color: var(--ink); font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+.tt-segment__time strong { color: var(--ink); font-family: var(--mono); font-size: 14px; font-variant-numeric: tabular-nums; }
 .tt-segment__time > span { color: var(--retention-color); font-size: 11px; font-weight: 700; }
-.tt-segment__time small { color: var(--ink-4); font-size: 10px; }
+.tt-segment__time small { color: var(--ink-2); font-size: 14px; }
 .tt-segment__spoken strong { color: var(--ink); font-family: var(--serif); font-size: 18px; font-weight: 500; line-height: 1.38; }
-.tt-segment__visual > span:last-child { color: var(--ink-3); font-size: 13px; line-height: 1.48; }
+.tt-segment__visual > span:last-child { color: var(--ink-2); font-size: 14px; line-height: 1.5; }
 .tt-segment--unscored {
   --retention-color: var(--ink-4);
   border-color: var(--hairline); background: var(--paper);
 }
 .tt-segment--unscored:hover, .tt-segment--unscored.tt-segment--active { border-color: var(--ink-4); background: var(--paper-2); }
 
-.tt-missing { padding: 24px; border: 1px dashed var(--hairline); border-radius: 12px; color: var(--ink-3); font-size: 13px; text-align: center; }
+.tt-missing { padding: 24px; border: 1px dashed var(--hairline); border-radius: 12px; color: var(--ink-2); font-size: 14px; text-align: center; }
 .tt-transcriptfallback { display: flex; flex-direction: column; gap: 16px; }
 .tt-transcriptfallback p { margin: 0; color: var(--ink-2); font-family: var(--serif); font-size: 17px; line-height: 1.7; white-space: pre-wrap; }
 .tt-context {
@@ -3273,6 +3271,35 @@ body::before {
 }
 .tt-context > div { padding: 18px 20px; background: var(--paper-2); }
 .tt-context p { margin: 7px 0 0; color: var(--ink-2); font-size: 13.5px; line-height: 1.6; }
+
+/* Local passage verdicts stay separate from the cumulative retention curve. */
+.tt-benchmark { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; padding: 16px; background: var(--paper); border: 1px solid var(--hairline); border-radius: 12px; color: var(--ink-2); font-size: 14px; }
+.tt-benchmark__summary { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; }
+.tt-benchmark__summary strong { color: var(--ink); }
+.tt-benchmark__early { border: 1px solid var(--hairline); padding: 4px 8px; border-radius: 6px; }
+.tt-benchmark p, .tt-passage__details p, .tt-coverage p { margin: 12px 0; line-height: 1.5; }
+.tt-benchmark > p { margin: 0; }
+.tt-benchmark summary, .tt-passage__details summary, .tt-coverage summary { cursor: pointer; color: var(--ink-2); font-size: 14px; }
+.tt-benchmark summary:focus-visible, .tt-passage__details summary:focus-visible, .tt-coverage summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.tt-cohortlist { display: flex; flex-direction: column; gap: 8px; padding-left: 20px; }
+.tt-cohortlist a { color: var(--accent); }
+.tt-chartlegend { display: flex; flex-wrap: wrap; gap: 12px 24px; padding: 12px; color: var(--ink-2); font-size: 14px; }
+.tt-chartlegend span { display: inline-flex; align-items: center; gap: 8px; }
+.tt-chartlegend span::before { content: ""; width: 24px; border-top: 2px solid var(--accent); }
+.tt-chartlegend span + span::before { border-top: 2px dashed var(--ink-3); }
+.tt-coverage { padding: 12px; color: var(--ink-2); font-size: 14px; }
+.tt-coverage__table { max-height: 240px; overflow: auto; }
+.tt-coverage table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.tt-coverage th, .tt-coverage td { padding: 8px; text-align: left; border-bottom: 1px solid var(--hairline); }
+.tt-passage { --retention-color: var(--ink-3); border: 1px solid var(--hairline); border-radius: 12px; background: var(--paper); }
+.tt-passage--better { --retention-color: var(--retention-good); }
+.tt-passage--worse { --retention-color: var(--retention-bad); }
+.tt-passage--better, .tt-passage--worse { border-color: color-mix(in oklab, var(--retention-color) 40%, var(--hairline)); background: color-mix(in oklab, var(--retention-color) 5%, var(--paper)); }
+.tt-passage__result { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 24px; padding: 12px 18px; border-top: 1px solid var(--rule-2); color: var(--ink-2); font-size: 14px; font-variant-numeric: tabular-nums; }
+.tt-verdict { color: var(--ink-2); }
+.tt-passage--better .tt-verdict, .tt-passage--worse .tt-verdict { color: var(--retention-color); }
+.tt-passage__details { padding: 0 18px 12px; color: var(--ink-2); font-size: 14px; }
+.tt-detail .tt-segment__label, .tt-detail .tt-insight__label { color: var(--ink-3); font-size: 11px; }
 
 @media (max-width: 900px) {
   .tt-table { min-width: 920px; }
@@ -3330,13 +3357,11 @@ body::before {
   .tt-retention__title { font-size: 25px; }
   .tt-retention__sub { font-size: 14px; }
   .tt-legend { width: 100%; }
-  .tt-legend__scale { flex: 1; }
   .tt-chartwrap { margin-top: 18px; padding: 5px 2px 0; }
   .tt-chart { width: 100%; min-width: 0; height: 200px; }
-  .tt-chart__axis { font-size: 22px; }
   .tt-insights { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tt-insight--wide { grid-column: 1 / -1; grid-row: 2; }
-  .tt-insight strong { font-size: 13px; }
+  .tt-insight strong { font-size: 17px; }
   .tt-scripthead { align-items: flex-start; flex-direction: column; gap: 3px; margin-top: 24px; }
   .tt-scripthead p { line-height: 1.4; }
   .tt-segment { grid-template-columns: 66px minmax(0, 1fr); gap: 12px; padding: 14px 12px 14px 16px; }

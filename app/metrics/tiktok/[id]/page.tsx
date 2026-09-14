@@ -3,26 +3,9 @@ import { sql } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { TiktokDetailClient } from "./TiktokDetailClient";
+import { analyzeRetention, RETENTION_SETTINGS, type RetentionVideo, type TikTokCurvePoint, type TikTokSourceSegment } from "@/lib/tiktokRetention";
 
 export const dynamic = "force-dynamic";
-
-export type TikTokCurvePoint = {
-  second: number;
-  retained_fraction: number;
-};
-
-export type TikTokSourceSegment = {
-  start_s: number;
-  end_s: number;
-  spoken: string | null;
-  on_screen: string | null;
-};
-
-export type TikTokRetentionSegment = TikTokSourceSegment & {
-  retained_start: number | null;
-  retained_end: number | null;
-  drop_pts: number | null;
-};
 
 export type TikTokDetail = {
   id: number;
@@ -49,50 +32,10 @@ export type TikTokDetail = {
   source_duration_ms: number | null;
 };
 
-type RetentionMapRow = {
-  second: number;
-  retained: number;
-  drop_pts: number;
-  spoken: string | null;
-  on_screen: string | null;
-};
-
-function normalized(value: string | null) {
-  return value?.trim() || null;
-}
-
-function groupRetentionRows(rows: RetentionMapRow[]): TikTokRetentionSegment[] {
-  const grouped: TikTokRetentionSegment[] = [];
-  for (const row of rows) {
-    const spoken = normalized(row.spoken);
-    const onScreen = normalized(row.on_screen);
-    if (!spoken && !onScreen) continue;
-
-    const previous = grouped[grouped.length - 1];
-    if (previous && previous.spoken === spoken && previous.on_screen === onScreen && previous.end_s === row.second) {
-      previous.end_s = row.second + 1;
-      previous.retained_end = row.retained * 100;
-      previous.drop_pts = (previous.drop_pts ?? 0) + Math.max(0, row.drop_pts);
-      continue;
-    }
-
-    grouped.push({
-      start_s: row.second,
-      end_s: row.second + 1,
-      spoken,
-      on_screen: onScreen,
-      retained_start: row.retained * 100,
-      retained_end: row.retained * 100,
-      drop_pts: Math.max(0, row.drop_pts),
-    });
-  }
-  return grouped;
-}
-
 export default async function TikTokDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: idValue } = await params;
-  const id = Number.parseInt(idValue, 10);
-  if (!Number.isFinite(id)) notFound();
+  const id = Number(idValue);
+  if (!Number.isSafeInteger(id) || id <= 0) notFound();
 
   const result = await db.execute(sql`
     SELECT
@@ -127,32 +70,22 @@ export default async function TikTokDetailPage({ params }: { params: Promise<{ i
   if (result.rows.length === 0) notFound();
   const video = result.rows[0] as TikTokDetail;
 
-  const mapResult = await db.execute(sql`
-    SELECT
-      second,
-      retained::float8 AS retained,
-      drop_pts::float8 AS drop_pts,
-      spoken,
-      on_screen
-    FROM tiktok_retention_map
-    WHERE tiktok_metrics_id = ${id}
-    ORDER BY second
-  `).catch(() => ({ rows: [] }));
-
-  let retentionSegments = groupRetentionRows(mapResult.rows as RetentionMapRow[]);
-  if (retentionSegments.length === 0 && Array.isArray(video.segments)) {
-    retentionSegments = video.segments
-      .filter((segment) => segment.spoken?.trim() || segment.on_screen?.trim())
-      .map((segment) => ({
-        start_s: Number(segment.start_s),
-        end_s: Number(segment.end_s),
-        spoken: normalized(segment.spoken),
-        on_screen: normalized(segment.on_screen),
-        retained_start: null,
-        retained_end: null,
-        drop_pts: null,
-      }));
-  }
+  // Current metrics have one row per upload and the newest fetched curve. Snapshots
+  // are older observations of those same uploads, not extra comparison videos.
+  const peers = video.create_time && video.duration_ms ? await db.execute(sql`
+    SELECT id, tiktok_id, duration_ms, create_time, fetched_at, views, permalink, retention_curve
+    FROM tiktok_metrics
+    WHERE tiktok_id <> ${video.tiktok_id}
+      AND create_time < ${video.create_time}
+      AND create_time >= ${video.create_time}::timestamptz - ${RETENTION_SETTINGS.lookbackDays} * interval '1 day'
+      AND duration_ms BETWEEN ${Math.ceil(video.duration_ms * (1 - RETENTION_SETTINGS.runtimeTolerance))}
+                          AND ${Math.floor(video.duration_ms * (1 + RETENTION_SETTINGS.runtimeTolerance))}
+      AND retention_curve IS NOT NULL
+    ORDER BY create_time DESC, id DESC
+  `) : { rows: [] };
+  // Select after validating curves, measurement age, views and account identity.
+  // Read source boundaries directly; the shared lag-based view misattributes intervals.
+  const analysis = analyzeRetention(video, video.segments, peers.rows as RetentionVideo[]);
 
   return (
     <main className="main">
@@ -165,7 +98,7 @@ export default async function TikTokDetailPage({ params }: { params: Promise<{ i
             All TikToks
           </Link>
         </div>
-        <TiktokDetailClient video={video} retentionSegments={retentionSegments} />
+        <TiktokDetailClient video={video} analysis={analysis} />
       </div>
     </main>
   );
