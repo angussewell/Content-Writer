@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ASSET_HOSTS = new Set([
+    "files.angussewell.com",
     "res.cloudinary.com",
     "eseodkdgtqzpypcsghsx.supabase.co",
     "files.catbox.moe",
